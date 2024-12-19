@@ -1,16 +1,18 @@
 import numpy as np
 import cv2
 from ultralytics import YOLO
+import matplotlib.pyplot as plt
 
 
 class Detector:
   """YOLO Object detection."""
 
-  def __init__(self, model, class_ids_filter=None):
+  def __init__(self, model, class_ids_filter=None, cmap_name='nipy_spectral'):
     self.model = YOLO(model)
     self.class_ids_filter = class_ids_filter
     self.class_id_names = None
     self.colors = None
+    self.cmap_name = cmap_name
 
   def detect(self, img):
     results = self.model.predict(source=img.copy(),
@@ -25,10 +27,10 @@ class Detector:
 
     if self.colors is None:
       num_classes = len(self.class_id_names)
-      self.colors = np.random.randint(0,
-                                      255,
-                                      size=(num_classes, 3),
-                                      dtype="uint8")
+      cmap = plt.get_cmap(self.cmap_name)
+      indices = np.linspace(0, 1, num_classes)
+      self.colors = (np.array([cmap(i)[:3]
+                               for i in indices]) * 255).astype("uint8")
 
   def draw_bboxes(self, img):
     for bbox, class_id, score in zip(self.bboxes, self.class_ids, self.scores):
