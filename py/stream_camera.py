@@ -10,10 +10,8 @@ import argparse
 
 class CameraStreamer:
   """
-      CameraStreamer handles live streaming from a given RTSP URL
-      using credentials from config.py. It provides methods for reading
-      frames, logging FPS and latency, and displaying frames.
-    """
+    CameraStreamer handles live streaming from a given RTSP URL.
+  """
 
   def __init__(self, url):
     self.url = url
@@ -21,21 +19,27 @@ class CameraStreamer:
     if not self.cap.isOpened():
       raise RuntimeError("Cannot open stream")
 
-    self.last_time = time.time()
-    self.frame_count = 0
-    self.fps = 0.0
-    self.latency = 0
-
   def read_frame(self):
-    start = time.time()
     ret, frame = self.cap.read()
     if not ret:
       return None
-    self.latency = (time.time() - start) * 1000
-    self.measure_stats()
     return frame
 
-  def measure_stats(self):
+  def release(self):
+    self.cap.release()
+
+
+class StatsMeasurer:
+  """
+    StatsMeasurer keeps track of FPS and frame latency.
+  """
+
+  def __init__(self):
+    self.last_time = time.time()
+    self.frame_count = 0
+    self.fps = 0.0
+
+  def update(self, latency_ms):
     self.frame_count += 1
     elapsed = time.time() - self.last_time
     if elapsed >= 1.0:
@@ -43,13 +47,13 @@ class CameraStreamer:
       logging.info(f"FPS: {self.fps:.2f}")
       self.frame_count = 0
       self.last_time = time.time()
-    logging.debug(f"Frame latency: {self.latency:.2f} ms")
-
-  def release(self):
-    self.cap.release()
+    logging.debug(f"Frame latency: {latency_ms:.2f} ms")
 
 
 def frame_reader(streamer, frame_queue):
+  """
+    Continuously read frames from the streamer and put them into the queue.
+  """
   while True:
     frame = streamer.read_frame()
     if frame is None:
@@ -72,6 +76,7 @@ def main():
 
   streamer = CameraStreamer(config.CAMERA_URL)
   detector = yolo_detector.Detector(config.YOLO_MODEL)
+  stats = StatsMeasurer()
 
   frame_queue = Queue(maxsize=30)
   t = threading.Thread(target=frame_reader,
@@ -80,9 +85,16 @@ def main():
   t.start()
 
   while True:
+    start_time = time.time()
     frame = frame_queue.get(timeout=1)
     while not frame_queue.empty() and args.force_real_time:
       frame = frame_queue.get_nowait()
+
+    if frame is None:
+      break
+
+    latency = (time.time() - start_time) * 1000.0
+    stats.update(latency)
 
     detector.detect(frame)
     detector.draw_bboxes(frame)
