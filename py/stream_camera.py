@@ -3,14 +3,16 @@ import time
 import logging
 import config
 import yolo_detector
+from queue import Queue
+import threading
 
 
 class CameraStreamer:
   """
-    CameraStreamer handles live streaming from a given RTSP URL
-    using credentials from config.py. It provides methods for reading
-    frames, logging FPS and latency, and displaying frames.
-  """
+      CameraStreamer handles live streaming from a given RTSP URL
+      using credentials from config.py. It provides methods for reading
+      frames, logging FPS and latency, and displaying frames.
+    """
 
   def __init__(self, url):
     self.url = url
@@ -46,24 +48,39 @@ class CameraStreamer:
     self.cap.release()
 
 
+def frame_reader(streamer, frame_queue):
+  while True:
+    frame = streamer.read_frame()
+    if frame is None:
+      break
+    frame_queue.put(frame)
+  frame_queue.put(None)
+
+
 def main():
   logging.basicConfig(level=logging.INFO,
                       format="%(asctime)s %(levelname)s: %(message)s")
   logging.info(f"Initialized {config.CAMERA_URL}")
 
   streamer = CameraStreamer(config.CAMERA_URL)
-
   detector = yolo_detector.Detector(config.YOLO_MODEL)
 
+  frame_queue = Queue(maxsize=30)
+  t = threading.Thread(target=frame_reader,
+                       args=(streamer, frame_queue),
+                       daemon=True)
+  t.start()
+
   while True:
-    frame = streamer.read_frame()
+    frame = frame_queue.get()
+    while not frame_queue.empty():
+      frame = frame_queue.get_nowait()
     if frame is None:
       logging.error("No frame received. Exiting.")
       break
 
     detector.detect(frame)
     detector.draw_bboxes(frame)
-
     cv2.imshow("Live Stream", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
