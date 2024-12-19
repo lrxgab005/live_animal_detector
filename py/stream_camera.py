@@ -5,6 +5,7 @@ import config
 import yolo_detector
 from queue import Queue
 import threading
+import argparse
 
 
 class CameraStreamer:
@@ -58,6 +59,13 @@ def frame_reader(streamer, frame_queue):
 
 
 def main():
+  parser = argparse.ArgumentParser(description='Live stream processing.')
+  parser.add_argument(
+      '--force_real_time',
+      action='store_true',
+      help='If set, only the latest frame is shown (skips queued frames).')
+  args = parser.parse_args()
+
   logging.basicConfig(level=logging.INFO,
                       format="%(asctime)s %(levelname)s: %(message)s")
   logging.info(f"Initialized {config.CAMERA_URL}")
@@ -72,12 +80,9 @@ def main():
   t.start()
 
   while True:
-    frame = frame_queue.get()
-    while not frame_queue.empty():
+    frame = frame_queue.get(timeout=1)
+    while not frame_queue.empty() and args.force_real_time:
       frame = frame_queue.get_nowait()
-    if frame is None:
-      logging.error("No frame received. Exiting.")
-      break
 
     detector.detect(frame)
     detector.draw_bboxes(frame)
