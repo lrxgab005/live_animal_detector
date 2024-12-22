@@ -7,10 +7,15 @@ import matplotlib.pyplot as plt
 class Detector:
   """YOLO Object detection."""
 
-  def __init__(self, model, class_ids_filter=None, cmap_name='nipy_spectral'):
+  def __init__(self,
+               model,
+               class_ids_filter=None,
+               yolo_min_confidence=1.0,
+               cmap_name='nipy_spectral'):
     self.model = YOLO(model)
     self.detections = []
     self.class_ids_filter = class_ids_filter
+    self.yolo_min_confidence = yolo_min_confidence
     self.class_id_names = None
     self.colors = None
     self.cmap_name = cmap_name
@@ -31,9 +36,22 @@ class Detector:
     scores = np.array(result.boxes.conf.cpu(), dtype="float").round(2)
     self.detections = zip(bboxes, class_ids, scores)
 
-    if self.class_ids_filter is not None:
-      mask = np.isin(class_ids, self.class_ids_filter)
-      self.detections = self.detections[mask]
+    bboxes, class_ids, scores = self.apply_min_confidence_filter(
+        bboxes, class_ids, scores)
+    bboxes, class_ids, scores = self.apply_class_filter(
+        bboxes, class_ids, scores)
+
+    self.detections = zip(bboxes, class_ids, scores)
+
+  def apply_min_confidence_filter(self, bboxes, class_ids, scores):
+    mask = scores >= self.yolo_min_confidence
+    return bboxes[mask], class_ids[mask], scores[mask]
+
+  def apply_class_filter(self, bboxes, class_ids, scores):
+    if self.class_ids_filter is None:
+      return bboxes, class_ids, scores
+    mask = np.isin(class_ids, self.class_ids_filter)
+    return bboxes[mask], class_ids[mask], scores[mask]
 
   def set_colors(self):
     num_classes = len(self.class_id_names)

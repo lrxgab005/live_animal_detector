@@ -75,7 +75,11 @@ def main():
   logging.info(f"Initialized {config.CAMERA_URL}")
 
   streamer = CameraStreamer(config.CAMERA_URL)
-  detector = yolo_detector.Detector(config.YOLO_MODEL, config.YOLO_CLASS_IDS)
+  detector = yolo_detector.Detector(
+      config.YOLO_MODEL,
+      config.YOLO_CLASS_IDS,
+      config.YOLO_MIN_CONFIDENCE,
+  )
   stats = StatsMeasurer()
 
   frame_queue = Queue(maxsize=30)
