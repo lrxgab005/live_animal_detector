@@ -80,15 +80,19 @@ class Detector:
                              for i in indices]) * 255).astype("uint8")
 
   def analyze_detections(self, img):
+    alarm_sounded = False
     for bbox, class_id, score in self.detections:
       alarm = self.check_alarm(class_id, score)
+      if alarm:
+        alarm_sounded = True
       self.draw_bbox(img, bbox, class_id, score, alarm)
+    return alarm_sounded
 
   def draw_bbox(self, img, bbox, class_id, score, fill=False):
     x1, y1, x2, y2 = bbox
     label = f"{self.class_id_names[class_id]}: {score:.2f}"
     color = [int(c) for c in self.colors[class_id]]
-    line_thickness = 2 if not fill else -1
+    line_thickness = 1 if not fill else 4
     cv2.rectangle(img, (x1, y1), (x2, y2), color, line_thickness)
     cv2.putText(img, label, (x1, max(y1 - 10, 0)), cv2.FONT_HERSHEY_SIMPLEX,
                 0.5, color, 2)

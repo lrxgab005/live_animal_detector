@@ -6,6 +6,8 @@ import yolo_detector
 from queue import Queue
 import threading
 import argparse
+import os
+import datetime
 
 
 class CameraStreamer:
@@ -109,7 +111,12 @@ def main():
     stats.update(latency)
 
     detector.detect(frame)
-    detector.analyze_detections(frame)
+    if detector.analyze_detections(frame):
+      img_path = os.path.join(
+          config.IMGS_PATH,
+          f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg')
+      logging.info(f"Writing image to {img_path}")
+      cv2.imwrite(img_path, frame)
 
     cv2.imshow("Live Stream", frame)
 
