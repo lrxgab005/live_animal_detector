@@ -76,9 +76,12 @@ def main():
 
   streamer = CameraStreamer(config.CAMERA_URL)
   detector = yolo_detector.Detector(
-      config.YOLO_MODEL,
-      config.YOLO_CLASS_IDS,
-      config.YOLO_MIN_CONFIDENCE,
+      model=config.YOLO_MODEL,
+      class_ids_filter=config.YOLO_CLASS_IDS,
+      min_confidence=config.YOLO_MIN_CONFIDENCE,
+      alarms=config.YOLO_ALARMS,
+      notificaion_sound_file=config.YOLO_NOTIFICATION_SOUND_FILE,
+      alarm_cool_down_s=config.YOLO_ALARM_COOL_DOWN_S,
   )
   stats = StatsMeasurer()
 
@@ -101,7 +104,8 @@ def main():
     stats.update(latency)
 
     detector.detect(frame)
-    detector.draw_bboxes(frame)
+    detector.analyze_detections(frame)
+
     cv2.imshow("Live Stream", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
