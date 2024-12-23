@@ -2,6 +2,8 @@ import numpy as np
 import cv2
 from ultralytics import YOLO
 import matplotlib.pyplot as plt
+import torch
+import logging
 
 
 class Detector:
@@ -19,12 +21,17 @@ class Detector:
     self.class_id_names = None
     self.colors = None
     self.cmap_name = cmap_name
+    self.device = 'cpu'
+    if torch.backends.mps.is_available():
+      logging.info("Apple Silicon detected. Using GPU.")
+      self.device = 'mps'
 
   def detect(self, img):
     results = self.model.predict(source=img.copy(),
                                  save=False,
                                  save_txt=False,
-                                 verbose=False)
+                                 verbose=False,
+                                 device=self.device)
     result = results[0]
     self.class_id_names = result.names
 
