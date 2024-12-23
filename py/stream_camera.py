@@ -93,6 +93,11 @@ def main():
 
   while True:
     start_time = time.time()
+
+    while frame_queue.empty():
+      logging.debug("Frame Queue Empty")
+      time.sleep(0.1)
+
     frame = frame_queue.get(timeout=10)
     while not frame_queue.empty() and args.force_real_time:
       frame = frame_queue.get_nowait()
