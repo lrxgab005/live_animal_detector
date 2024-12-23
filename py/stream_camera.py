@@ -93,7 +93,7 @@ def main():
 
   while True:
     start_time = time.time()
-    frame = frame_queue.get(timeout=1)
+    frame = frame_queue.get(timeout=10)
     while not frame_queue.empty() and args.force_real_time:
       frame = frame_queue.get_nowait()
 
