@@ -3,4 +3,4 @@ ultralytics
 numpy
 torch
 pygame
-python-tk
+tk
