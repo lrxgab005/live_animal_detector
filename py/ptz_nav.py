@@ -6,7 +6,6 @@ import tkinter as tk
 import requests
 from requests.auth import HTTPDigestAuth
 import config
-import time
 
 
 class PTZController:
@@ -18,12 +17,12 @@ class PTZController:
     self.host = config.HOST
     self.channel = 1
     self.base_url = f"http://{self.host}/ISAPI/PTZCtrl/channels/{self.channel}/continuous"
-    self.vel_pan = 20
+    self.vel_pan = 60
     self.vel_tilt = 50
     self.vel_zoom = 100
-    self.t_pan_ms = -1
+    self.t_pan_ms = 500
     self.t_tilt_ms = 1000
-    self.t_zoom_ms = 50
+    self.t_zoom_ms = 500
     self.max_duration_s = max_duration_s
 
   def update_velocity(self, pan=0, tilt=0, zoom=0):
@@ -44,9 +43,6 @@ class PTZController:
     self.update_velocity(pan, tilt, zoom)
     if duration > 0:
       self.root.after(duration, self.stop)
-    else:
-      time.sleep(self.max_duration_s)
-      self.move(pan, tilt, zoom, duration)
 
   def stop(self):
     self.update_velocity(0, 0, 0)
@@ -81,13 +77,25 @@ def main():
       root,
       text="-",
       command=lambda: ctrl.move(0, 0, -ctrl.vel_zoom, ctrl.t_zoom_ms))
+  btn_pause = tk.Button(root, text="⏸", command=ctrl.stop)
 
-  btn_up.grid(row=0, column=1)
-  btn_left.grid(row=1, column=0)
-  btn_right.grid(row=1, column=2)
-  btn_down.grid(row=2, column=1)
-  btn_zoom_in.grid(row=0, column=3)
-  btn_zoom_out.grid(row=1, column=3)
+  # Infinite pan buttons
+  btn_lleft = tk.Button(root,
+                        text="⟸",
+                        command=lambda: ctrl.move(-ctrl.vel_pan, 0, 0, 0))
+  btn_rright = tk.Button(root,
+                         text="⟹",
+                         command=lambda: ctrl.move(ctrl.vel_pan, 0, 0, 0))
+
+  btn_lleft.grid(row=1, column=0)
+  btn_left.grid(row=1, column=1)
+  btn_up.grid(row=0, column=2)
+  btn_pause.grid(row=1, column=2)
+  btn_down.grid(row=2, column=2)
+  btn_right.grid(row=1, column=3)
+  btn_rright.grid(row=1, column=4)
+  btn_zoom_in.grid(row=0, column=5)
+  btn_zoom_out.grid(row=2, column=5)
 
   root.mainloop()
 
