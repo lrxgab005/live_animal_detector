@@ -1,7 +1,3 @@
-"""
-    Simple Tkinter interface for PTZ velocity control
-"""
-
 import tkinter as tk
 import requests
 from requests.auth import HTTPDigestAuth
@@ -17,11 +13,11 @@ class PTZController:
     self.host = config.HOST
     self.channel = 1
     self.base_url = f"http://{self.host}/ISAPI/PTZCtrl/channels/{self.channel}/continuous"
-    self.vel_pan = 60
+    self.vel_pan = 50
     self.vel_tilt = 50
-    self.vel_zoom = 100
+    self.vel_zoom = 50
     self.t_pan_ms = 500
-    self.t_tilt_ms = 1000
+    self.t_tilt_ms = 500
     self.t_zoom_ms = 500
     self.max_duration_s = max_duration_s
 
@@ -40,6 +36,7 @@ class PTZController:
                  timeout=3)
 
   def move(self, pan=0, tilt=0, zoom=0, duration=5000):
+    print(f"pan={pan}, tilt={tilt}, zoom={zoom}")
     self.update_velocity(pan, tilt, zoom)
     if duration > 0:
       self.root.after(duration, self.stop)
@@ -87,6 +84,32 @@ def main():
                          text="⟹",
                          command=lambda: ctrl.move(ctrl.vel_pan, 0, 0, 0))
 
+  # Velocity adjustment buttons
+  btn_inc_pan = tk.Button(
+      root,
+      text="++Pan",
+      command=lambda: setattr(ctrl, 'vel_pan', min(ctrl.vel_pan + 10, 100)))
+  btn_dec_pan = tk.Button(
+      root,
+      text="--Pan",
+      command=lambda: setattr(ctrl, 'vel_pan', max(ctrl.vel_pan - 10, 10)))
+  btn_inc_tilt = tk.Button(
+      root,
+      text="++Tilt",
+      command=lambda: setattr(ctrl, 'vel_tilt', min(ctrl.vel_tilt + 10, 100)))
+  btn_dec_tilt = tk.Button(
+      root,
+      text="--Tilt",
+      command=lambda: setattr(ctrl, 'vel_tilt', max(ctrl.vel_tilt - 10, 10)))
+  btn_inc_zoom = tk.Button(
+      root,
+      text="++Zoom",
+      command=lambda: setattr(ctrl, 'vel_zoom', min(ctrl.vel_zoom + 10, 100)))
+  btn_dec_zoom = tk.Button(
+      root,
+      text="--Zoom",
+      command=lambda: setattr(ctrl, 'vel_zoom', max(ctrl.vel_zoom - 10, 10)))
+
   btn_lleft.grid(row=1, column=0)
   btn_left.grid(row=1, column=1)
   btn_up.grid(row=0, column=2)
@@ -96,6 +119,13 @@ def main():
   btn_rright.grid(row=1, column=4)
   btn_zoom_in.grid(row=0, column=5)
   btn_zoom_out.grid(row=2, column=5)
+
+  btn_inc_pan.grid(row=3, column=0)
+  btn_dec_pan.grid(row=4, column=0)
+  btn_inc_tilt.grid(row=3, column=2)
+  btn_dec_tilt.grid(row=4, column=2)
+  btn_inc_zoom.grid(row=3, column=5)
+  btn_dec_zoom.grid(row=4, column=5)
 
   root.mainloop()
 
