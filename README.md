@@ -10,6 +10,14 @@ pip install -r requirements.txt
 
 ## Run
 
+Start Stream
+
 ```
-python py/stream_camera.py
+python py/stream_camera.py --force_real_time
+```
+
+Start Navigation UI
+
+```
+python py/ptz_nav.py
 ```
