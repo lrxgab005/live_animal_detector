@@ -27,7 +27,9 @@ git lfs install
 git lfs track "*.mp3"
 ```
 
-## Run
+## Run 
+
+### On Streaming PC
 
 **Start Stream**
 
@@ -39,4 +41,12 @@ python py/stream_camera.py --force_real_time
 
 ```
 python py/ptz_nav.py
+```
+
+### On Remote Audio Server
+
+**Start Audio Player**
+
+```
+python py/remote_player.py
 ```
