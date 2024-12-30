@@ -24,7 +24,7 @@ brew install git-lfs
 
 **Windows:**
 
-Download and install from the Git LFS website.
+Download and install from the [Git LFS website](https://git-lfs.com/).
 
 ### 2) Enable Git LFS
 
