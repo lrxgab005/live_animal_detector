@@ -1,3 +1,7 @@
+"""
+  PTZ controller with non-blocking infinite move scheduling
+"""
+
 import tkinter as tk
 import requests
 from requests.auth import HTTPDigestAuth
@@ -20,6 +24,8 @@ class PTZController:
     self.t_tilt_ms = 500
     self.t_zoom_ms = 500
     self.max_duration_s = max_duration_s
+    self._keep_moving = False
+    self._move_args = (0, 0, 0)
 
   def update_velocity(self, pan=0, tilt=0, zoom=0):
     xml_data = f"""
@@ -40,8 +46,20 @@ class PTZController:
     self.update_velocity(pan, tilt, zoom)
     if duration > 0:
       self.root.after(duration, self.stop)
+    else:
+      self._keep_moving = True
+      self._move_args = (pan, tilt, zoom)
+      self._schedule_continuous_move()
+
+  def _schedule_continuous_move(self):
+    # Repeatedly call update_velocityin a non-blocking way
+    if self._keep_moving:
+      pan, tilt, zoom = self._move_args
+      self.update_velocity(pan, tilt, zoom)
+      self.root.after(1000, self._schedule_continuous_move)
 
   def stop(self):
+    self._keep_moving = False
     self.update_velocity(0, 0, 0)
 
 
@@ -76,7 +94,6 @@ def main():
       command=lambda: ctrl.move(0, 0, -ctrl.vel_zoom, ctrl.t_zoom_ms))
   btn_pause = tk.Button(root, text="⏸", command=ctrl.stop)
 
-  # Infinite pan buttons
   btn_lleft = tk.Button(root,
                         text="⟸",
                         command=lambda: ctrl.move(-ctrl.vel_pan, 0, 0, 0))
@@ -84,7 +101,6 @@ def main():
                          text="⟹",
                          command=lambda: ctrl.move(ctrl.vel_pan, 0, 0, 0))
 
-  # Velocity adjustment buttons
   btn_inc_pan = tk.Button(
       root,
       text="++Pan",
