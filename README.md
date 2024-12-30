@@ -19,6 +19,14 @@ virtualenv env
 pip install -r requirements.txt
 ```
 
+Install git LFS for audio files
+
+```sh
+brew install git-lfs
+git lfs install
+git lfs track "*.mp3"
+```
+
 ## Run
 
 **Start Stream**
