@@ -8,12 +8,11 @@ import threading
 import argparse
 import os
 import datetime
+import viz
+import alarms
 
 
 class CameraStreamer:
-  """
-    CameraStreamer handles live streaming from a given RTSP URL.
-  """
 
   def __init__(self, url):
     self.url = url
@@ -32,9 +31,6 @@ class CameraStreamer:
 
 
 class StatsMeasurer:
-  """
-    StatsMeasurer keeps track of FPS and frame latency.
-  """
 
   def __init__(self):
     self.last_time = time.time()
@@ -53,9 +49,6 @@ class StatsMeasurer:
 
 
 def frame_reader(streamer, frame_queue):
-  """
-    Continuously read frames from the streamer and put them into the queue.
-  """
   while True:
     frame = streamer.read_frame()
     if frame is None:
@@ -77,14 +70,12 @@ def main():
   logging.info(f"Initialized {config.CAMERA_URL}")
 
   streamer = CameraStreamer(config.CAMERA_URL)
-  detector = yolo_detector.Detector(
-      model=config.YOLO_MODEL,
-      class_ids_filter=config.YOLO_CLASS_IDS,
-      min_confidence=config.YOLO_MIN_CONFIDENCE,
-      alarms=config.YOLO_ALARMS,
-      notificaion_sound_file=config.YOLO_NOTIFICATION_SOUND_FILE,
-      alarm_cool_down_s=config.YOLO_ALARM_COOL_DOWN_S,
-  )
+  detector = yolo_detector.Detector(model=config.YOLO_MODEL)
+  drawer = viz.FrameDrawer(detector.class_id_names)
+  alarm = alarms.Alarm(alarm_triggers=config.ALARM_TRIGGERS,
+                       class_id_names=detector.class_id_names,
+                       notificaion_sound_file=config.NOTIFICATION_SOUND_FILE,
+                       alarm_cool_down_s=config.ALARM_COOL_DOWN_S)
   stats = StatsMeasurer()
 
   frame_queue = Queue(maxsize=30)
@@ -110,8 +101,15 @@ def main():
     latency = (time.time() - start_time) * 1000.0
     stats.update(latency)
 
-    detector.detect(frame)
-    if detector.analyze_detections(frame):
+    detection_frame = detector.detect(frame)
+    detection_frame.apply_min_confidence_filter(config.YOLO_MIN_CONFIDENCE)
+    detection_frame.apply_class_filter(config.YOLO_CLASS_IDS)
+
+    drawer.draw_detections(detection_frame)
+    alarm_detections = alarm(detection_frame)
+    drawer.draw_detections(alarm_detections, bold=True)
+
+    if alarm_detections.has_detections:
       img_path = os.path.join(
           config.IMGS_PATH,
           f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg')
