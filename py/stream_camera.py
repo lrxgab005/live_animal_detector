@@ -72,10 +72,13 @@ def main():
   streamer = CameraStreamer(config.CAMERA_URL)
   detector = yolo_detector.Detector(model=config.YOLO_MODEL)
   drawer = viz.FrameDrawer(detector.class_id_names)
-  alarm = alarms.Alarm(alarm_triggers=config.ALARM_TRIGGERS,
-                       class_id_names=detector.class_id_names,
-                       notificaion_sound_file=config.NOTIFICATION_SOUND_FILE,
-                       alarm_cool_down_s=config.ALARM_COOL_DOWN_S)
+  alarm = alarms.Alarm(
+      alarm_triggers=config.ALARM_TRIGGERS,
+      class_id_names=detector.class_id_names,
+      notificaion_sound_file_name=config.NOTIFICATION_SOUND_FILE_NAME,
+      alarm_sound_file_name=config.ALARM_SOUND_FILE_NAME,
+      alarm_cool_down_s=config.ALARM_COOL_DOWN_S,
+      remote_player_url=config.REMOTE_PLAYER_URL)
   stats = StatsMeasurer()
 
   frame_queue = Queue(maxsize=30)
