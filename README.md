@@ -36,7 +36,7 @@ git lfs pull
 ### 3) Setup Virtual Env:
 
 ```sh
-virtualenv env
+python3.10 -m venv env
 . env/bin/activate
 ```
 
@@ -53,19 +53,27 @@ pip install -r requirements.txt
 pip install -r requirements_audio_server.txt
 ```
 
+### 4) Create camera configs
+
+Create a camera config file for each camera you want to interface with.
+
+```sh
+python py/create_cam_config.py
+```
+
 ## Run 
 
 ### On Streaming PC
 
 **Start Stream**
 
-```
-python py/stream_camera.py --force_real_time
+```sh
+python py/stream_camera.py --camera_config PATH_TO_CAM_CONFIG --force_real_time
 ```
 
 **Start Navigation UI**
 
-```
+```sh
 python py/ptz_nav.py
 ```
 
@@ -73,6 +81,6 @@ python py/ptz_nav.py
 
 **Start Audio Player**
 
-```
+```sh
 python py/remote_player.py
 ```

@@ -63,11 +63,25 @@ def main():
       '--force_real_time',
       action='store_true',
       help='If set, only the latest frame is shown (skips queued frames).')
+  parser.add_argument('--camera_config',
+                      help='Path to camera config file.'
+                      'To create run: python py/create_cam_config.py')
+  parser.add_argument('--video_file',
+                      help='Path to video file to use as input')
+  parser.add_argument('--webcam',
+                      type=int,
+                      help='Webcam device number (0 or greater)')
   args = parser.parse_args()
 
   logging.basicConfig(level=logging.INFO,
                       format="%(asctime)s %(levelname)s: %(message)s")
-  logging.info(f"Initialized {config.CAMERA_URL}")
+
+  if args.camera_config is not None:
+    config.load_cam_settings(args.camera_config)
+  elif args.video_file is not None:
+    config.CAMERA_URL = args.video_file
+  elif args.webcam is not None:
+    config.CAMERA_URL = args.webcam
 
   streamer = CameraStreamer(config.CAMERA_URL)
   detector = yolo_detector.Detector(model=config.YOLO_MODEL)
@@ -86,6 +100,8 @@ def main():
                        args=(streamer, frame_queue),
                        daemon=True)
   t.start()
+
+  logging.info(f"Initialized {config.CAMERA_URL}")
 
   while True:
     start_time = time.time()
