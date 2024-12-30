@@ -13,18 +13,30 @@ The Live Animal Detector is a powerful tool designed to detect and identify anim
 
 To set up the environment and install the necessary dependencies, follow these steps:
 
-```sh
-virtualenv env
-. env/bin/activate
-pip install -r requirements.txt
-```
-
-Install git LFS for audio files
+Install git LFS for audio files:
 
 ```sh
 brew install git-lfs
 git lfs install
 git lfs track "*.mp3"
+```
+
+Setup Virtual Env:
+
+```sh
+virtualenv env
+. env/bin/activate
+```
+
+**For Video Stream PC**
+
+```sh
+pip install -r requirements.txt
+```
+
+**For Audio Server**
+```sh
+pip install -r requirements_audio_server.txt
 ```
 
 ## Run 

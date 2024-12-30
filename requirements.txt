@@ -4,4 +4,3 @@ numpy
 torch
 pygame
 tk
-flask
