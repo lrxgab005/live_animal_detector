@@ -58,9 +58,11 @@ def frame_reader(streamer, frame_queue):
 
 
 def main():
-  parser = argparse.ArgumentParser(description='Live stream processing.')
+  parser = argparse.ArgumentParser(
+      description='Live stream processing. Can be run on network camera stream,'
+      ' video file or webcam. Default is webcam.')
   parser.add_argument('--camera_config',
-                      help='Path to camera config file.'
+                      help='Path to network camera stream config file.'
                       'To create run: python py/create_cam_config.py')
   parser.add_argument('--video_file',
                       help='Path to video file to use as input')
@@ -80,9 +82,15 @@ def main():
     config.CAMERA_URL = args.video_file
   elif args.webcam is not None:
     config.CAMERA_URL = args.webcam
+  else:
+    logging.info("No input source provided. Using default: webcam 0.")
 
   if args.remote_player is not None:
     config.REMOTE_PLAYER_URL = args.remote_player
+  else:
+    logging.info(
+        f"Remote player URL not set. Using default: {config.REMOTE_PLAYER_URL}"
+    )
 
   logging.basicConfig(level=logging.INFO,
                       format="%(asctime)s %(levelname)s: %(message)s")
