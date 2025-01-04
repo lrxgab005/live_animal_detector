@@ -59,10 +59,6 @@ def frame_reader(streamer, frame_queue):
 
 def main():
   parser = argparse.ArgumentParser(description='Live stream processing.')
-  parser.add_argument(
-      '--force_real_time',
-      action='store_true',
-      help='If set, only the latest frame is shown (skips queued frames).')
   parser.add_argument('--camera_config',
                       help='Path to camera config file.'
                       'To create run: python py/create_cam_config.py')
@@ -71,7 +67,22 @@ def main():
   parser.add_argument('--webcam',
                       type=int,
                       help='Webcam device number (0 or greater)')
+  parser.add_argument('--remote_player',
+                      help='URL of the remote player for alarm sounds.')
   args = parser.parse_args()
+
+  logging.basicConfig(level=logging.INFO,
+                      format="%(asctime)s %(levelname)s: %(message)s")
+
+  if args.camera_config is not None:
+    config.load_cam_settings(args.camera_config)
+  elif args.video_file is not None:
+    config.CAMERA_URL = args.video_file
+  elif args.webcam is not None:
+    config.CAMERA_URL = args.webcam
+
+  if args.remote_player is not None:
+    config.REMOTE_PLAYER_URL = args.remote_player
 
   logging.basicConfig(level=logging.INFO,
                       format="%(asctime)s %(levelname)s: %(message)s")
@@ -111,8 +122,8 @@ def main():
       time.sleep(0.1)
 
     frame = frame_queue.get(timeout=10)
-    while not frame_queue.empty() and args.force_real_time:
-      frame = frame_queue.get_nowait()
+    while not frame_queue.empty() and not args.video_file:
+      frame = frame_queue.get_nowait()  # Drop old queue frames if real-time
 
     if frame is None:
       break

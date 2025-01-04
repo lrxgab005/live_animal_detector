@@ -68,7 +68,7 @@ python py/create_cam_config.py
 **Start Stream**
 
 ```sh
-python py/stream_camera.py --camera_config PATH_TO_CAM_CONFIG --force_real_time
+python py/stream_camera.py --camera_config PATH_TO_CAM_CONFIG
 ```
 
 **Start Navigation UI**
