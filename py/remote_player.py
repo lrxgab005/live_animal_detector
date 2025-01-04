@@ -3,9 +3,24 @@ import pygame
 import logging
 import os
 import config
+import argparse
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s: %(message)s")
+
+
+def parse_args():
+  parser = argparse.ArgumentParser(description='Audio server')
+  parser.add_argument('--host',
+                      type=str,
+                      default='127.0.0.1',
+                      help='IP address to bind to (default: 127.0.0.1)')
+  parser.add_argument('--port',
+                      type=int,
+                      default=5000,
+                      help='Port to listen on (default: 5000)')
+  return parser.parse_args()
+
 
 app = Flask(__name__)
 pygame.mixer.init()
@@ -45,5 +60,6 @@ def stop_endpoint():
 
 
 if __name__ == '__main__':
-  logging.info("Starting audio server on port 5000")
-  app.run(port=5000)
+  args = parse_args()
+  logging.info(f"Starting audio server on {args.host}:{args.port}")
+  app.run(host=args.host, port=args.port)
