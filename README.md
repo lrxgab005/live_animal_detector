@@ -1,23 +1,52 @@
 # Live Animal Detector from Camera Feed
 
-The Live Animal Detector is a distributed system that processes network camera video streams through a YOLO (You Only Look Once) object detection model. The server analyzes frames in real-time to detect and classify a wide range of objects and animals. Based on configurable detection confidence thresholds and object classes, the system can trigger notifications to a remote audio server for alarm playback through stereo speakers. This architecture enables efficient wildlife monitoring and automated response capabilities.
+A distributed system that processes network camera video streams using YOLO object detection for real-time wildlife monitoring and interaction. Combines PTZ camera tracking with configurable audio responses through remote-controlled speakers.
 
-## Features
+## Server Architecture
 
-- **Real-time Processing**: Analyzes camera feeds frame by frame using single-shot detection
-- **YOLO Detection**: Implements YOLO (You Only Look Once) object detection model
-- **Detection Filters**: Configurable confidence thresholds and object class filtering
-- **PTZ Camera Interface**: REST-based control system for PTZ camera operations
-- **Distributed Architecture**: Web-based communication between detection and audio nodes
-- **HTTP REST APIs**: Standardized interfaces for system components and control
-- **Remote Object Detection**: Ability to offload neural network computation to remote GPU servers
+The system consists of three interconnected components:
 
-## Server Archicteture
+```
++-----------------+         +-----------------+
+|  Detection Node |         |   Audio Node    |
+|                 |  HTTP   |                 |
+|  - YOLO Model   |-------->|  - REST API     |
+|  - PTZ Control  |         |  - Audio Player |
++--------+--------+         +-----------------+
+         |
+         | RTSP + HTTP
+         v
++------------------+
+|   PTZ Camera     |
+|  - Video Feed    |
+|  - Movement API  |
++------------------+
+```
 
+### **Object Detection Server**
+- Captures RTSP video stream from network camera
+- Runs YOLO object detection on captured frames
+- Sends alarm triggers via HTTP POST to Audio Server
+- Controls PTZ camera via HTTP/REST with digest authentication
 
+### **Audio Server **
+- REST API endpoints:
+  - POST /play - Plays specified audio file
+  - POST /stop - Stops current playback
+- Manages local audio files stored on git LFS
+- Controls system audio output via pygame
+
+### **PTZ Network Camera**
+- Provides RTSP video stream
+- Sends HTTP/REST commands for PTZ control
+- Uses digest authentication for API security
+
+### Communication Protocols
+- Camera Stream: RTSP over TCP
+- PTZ Control: HTTP REST with digest authentication
+- Audio Control: HTTP REST (JSON)
 
 ## Setup
-
 
 To set up the environment and install the necessary dependencies, follow these steps:
 
