@@ -13,7 +13,7 @@ def parse_args():
   parser = argparse.ArgumentParser(description='Audio server')
   parser.add_argument('--host',
                       type=str,
-                      default='127.0.0.1',
+                      default='0.0.0.0',
                       help='IP address to bind to (default: 127.0.0.1)')
   parser.add_argument('--port',
                       type=int,
