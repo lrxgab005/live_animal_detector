@@ -29,7 +29,7 @@ The system consists of three interconnected components:
 - Sends alarm triggers via HTTP POST to Audio Server
 - Controls PTZ camera via HTTP/REST with digest authentication
 
-### **Audio Server **
+### **Audio Server**
 - REST API endpoints:
   - POST /play - Plays specified audio file
   - POST /stop - Stops current playback
@@ -112,7 +112,7 @@ python py/stream_camera.py --camera_config PATH_TO_CAM_CONFIG
 **Start Navigation UI**
 
 ```sh
-python py/ptz_nav.py
+python py/ptz_nav.py --camera_config PATH_TO_CAM_CONFIG
 ```
 
 ### On Remote Audio Server

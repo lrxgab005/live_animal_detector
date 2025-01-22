@@ -6,6 +6,7 @@ import tkinter as tk
 import requests
 from requests.auth import HTTPDigestAuth
 import config
+import argparse
 
 
 class PTZController:
@@ -64,6 +65,18 @@ class PTZController:
 
 
 def main():
+
+  parser = argparse.ArgumentParser(
+      description='PTZ controller with non-blocking infinite move scheduling')
+  parser.add_argument('--camera_config',
+                      required=True,
+                      help='Path to network camera stream config file.'
+                      'To create run: python py/create_cam_config.py')
+  args = parser.parse_args()
+
+  if args.camera_config is not None:
+    config.load_cam_settings(args.camera_config)
+
   root = tk.Tk()
   root.title("PTZ Navigation")
   ctrl = PTZController(root)
