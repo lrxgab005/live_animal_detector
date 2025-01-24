@@ -40,8 +40,9 @@ def play_endpoint():
     return jsonify({"error": f"Cant find {file_path}"}), 400
 
   try:
+    pygame.mixer.music.stop()
     pygame.mixer.music.load(file_path)
-    pygame.mixer.music.play()
+    pygame.mixer.music.play(0)
     logging.info(f"Playing audio: {file_path}")
     return jsonify({
         "file": os.path.basename(file_path),
