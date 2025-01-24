@@ -64,6 +64,12 @@ brew install tesseract
 
 Download and install from the [Git LFS website](https://git-lfs.com/).
 
+**Raspbian**
+
+```sh
+sudo apt-get install git-lfs
+```
+
 ### 2) Enable Git LFS
 
 ```sh
@@ -120,5 +126,6 @@ python py/ptz_nav.py --camera_config PATH_TO_CAM_CONFIG
 **Start Audio Player**
 
 ```sh
-python py/remote_player.py
+tmux new-session -d -s audio_player
+./auto_restarter.sh py/remote_player.py
 ```
