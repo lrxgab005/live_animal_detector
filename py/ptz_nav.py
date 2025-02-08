@@ -7,6 +7,7 @@ import requests
 from requests.auth import HTTPDigestAuth
 import config
 import argparse
+import xml.etree.ElementTree as ET
 
 
 class PTZController:
@@ -16,8 +17,9 @@ class PTZController:
     self.user = config.USER
     self.password = config.PASSWORD
     self.host = config.HOST
+    self.port = config.PORT
     self.channel = 1
-    self.base_url = f"http://{self.host}/ISAPI/PTZCtrl/channels/{self.channel}/continuous"
+    self.base_url = f"http://{self.host}:{self.port}/ISAPI/PTZCtrl/channels/{self.channel}/continuous"
     self.vel_pan = 50
     self.vel_tilt = 50
     self.vel_zoom = 50
@@ -36,15 +38,43 @@ class PTZController:
         <zoom>{zoom}</zoom>
       </PTZData>
     """
+
     requests.put(self.base_url,
                  data=xml_data,
                  headers={"Content-Type": "text/xml"},
                  auth=HTTPDigestAuth(self.user, self.password),
                  timeout=3)
 
+  def get_status(self):
+    status_url = f"http://{self.host}:{self.port}/ISAPI/PTZCtrl/channels/{self.channel}/status"
+    response = requests.get(status_url,
+                            auth=HTTPDigestAuth(self.user, self.password),
+                            timeout=3)
+    return self.parse_status(response.text)
+
+  def parse_status(self, xml_text):
+    """Parse PTZ status XML response and return position values."""
+
+    # Parse XML
+    root = ET.fromstring(xml_text)
+
+    # Define namespace
+    ns = {"hik": "http://www.hikvision.com/ver20/XMLSchema"}
+
+    # Extract values
+    elevation = root.find(".//hik:AbsoluteHigh/hik:elevation", ns).text
+    azimuth = root.find(".//hik:AbsoluteHigh/hik:azimuth", ns).text
+    zoom = root.find(".//hik:AbsoluteHigh/hik:absoluteZoom", ns).text
+
+    # Convert to appropriate types
+    elevation, azimuth, zoom = int(elevation), int(azimuth), int(zoom)
+
+    return {'elevation': elevation, 'azimuth': azimuth, 'zoom': zoom}
+
   def move(self, pan=0, tilt=0, zoom=0, duration=5000):
     print(f"pan={pan}, tilt={tilt}, zoom={zoom}")
     self.update_velocity(pan, tilt, zoom)
+    print(self.get_status())
     if duration > 0:
       self.root.after(duration, self.stop)
     else:
