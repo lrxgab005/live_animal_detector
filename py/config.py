@@ -8,10 +8,10 @@ REMOTE_PLAYER_URL = f"http://{HOST}:{PORT}"
 
 # Alarm Settings
 ALARM_TRIGGERS = {
-    0: 0.5,  # Human
-    2: 0.6,  # Car
-    14: 0.5,  # Bird
-    16: 0.5,  # Dog
+    0: 0.8,  # Human
+    2: 0.8,  # Car
+    14: 0.7,  # Bird
+    16: 0.7,  # Dog
     17: 0.5,  # Horse
     18: 0.5,  # Sheep
     19: 0.5,  # Cow
