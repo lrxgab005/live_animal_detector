@@ -10,6 +10,8 @@ import requests
 from requests.auth import HTTPDigestAuth
 import xml.etree.ElementTree as ET
 import config  # your config module provides HOST, PORT, USER, PASSWORD
+import numpy as np
+import time
 
 
 class PTZCamera:
@@ -161,6 +163,36 @@ class PTZControllerUI:
     except Exception as e:
       print("Error during absolute move:", e)
 
+  def move_absolute_with_speed(self,
+                               target_elevation,
+                               target_azimuth,
+                               target_zoom,
+                               steps=10,
+                               wait_time_ms=1000):
+    try:
+      current_status = self.camera.get_status()
+    except Exception as e:
+      print("Error retrieving camera status:", e)
+      return
+
+    # Extract the current positions.
+    current_elev = current_status["elevation"]
+    current_azim = current_status["azimuth"]
+    current_zoom = current_status["zoom"]
+
+    # Compute the intermediate positions with numpy.linspace.
+    elev_steps = np.linspace(current_elev, target_elevation, steps)
+    azim_steps = np.linspace(current_azim, target_azimuth, steps)
+    zoom_steps = np.linspace(current_zoom, target_zoom, steps)
+
+    for elev, azim, zoom in zip(elev_steps, azim_steps, zoom_steps):
+      try:
+        # Send an absolute move command for the current step.
+        self.camera.move_absolute(elev, azim, zoom)
+        time.sleep(wait_time_ms / 1000)
+      except Exception as e:
+        print(f"Error at step: {elev}, {azim}, {zoom}: {e}")
+
   def goto_preset(self, preset_id):
     try:
       self.camera.go_to_preset(preset_id)
@@ -174,7 +206,8 @@ class PTZControllerUI:
       print("Error saving preset:", e)
 
   def show_move_absolute_dialog(self):
-    AbsoluteMoveDialog(self.root, self.move_absolute, self.camera.get_status())
+    AbsoluteMoveSpeedDialog(self.root, self.move_absolute_with_speed,
+                            self.camera.get_status())
 
   def show_save_preset_dialog(self):
     PresetSaveDialog(self.root, self.save_preset)
@@ -183,28 +216,26 @@ class PTZControllerUI:
     PresetGotoDialog(self.root, self.goto_preset)
 
 
-class AbsoluteMoveDialog(tk.Toplevel):
+class AbsoluteMoveSpeedDialog(tk.Toplevel):
   """
-    A dialog window that collects absolute move values,
-    pre-filled with the current camera status.
+    A dialog that collects absolute move target values along with 
+    movement speed parameters. The dialog includes fields for elevation, 
+    azimuth, zoom, number of steps, and wait time (ms).
   """
 
-  def __init__(self, master, callback, status):
-    """
-      :param master: The parent window.
-      :param callback: A function to call with (elevation, azimuth, zoom).
-      :param status: A dictionary with of the camera status.
-    """
+  def __init__(self, master, callback, status, steps=10, wait_time_ms=2000):
     super().__init__(master)
     self.callback = callback
-    self.title("Absolute Move")
-    self.grab_set()  # Make the dialog modal
+    self.title("Absolute Move with Speed")
+    self.grab_set()
 
-    # Define the fields to be displayed and pre-filled
+    self.field_names = [
+        "elevation", "azimuth", "zoom", "steps", "wait_time_ms"
+    ]
     self.fields = {}
-    self.field_names = ["elevation", "azimuth", "zoom"]
+    status["steps"] = steps
+    status["wait_time_ms"] = wait_time_ms
 
-    # Loop through the field names, creating a label and entry for each.
     for i, field in enumerate(self.field_names):
       tk.Label(self, text=field.capitalize() + ":").grid(row=i,
                                                          column=0,
@@ -222,14 +253,16 @@ class AbsoluteMoveDialog(tk.Toplevel):
 
   def on_ok(self):
     try:
-      # Convert each entry value to a float.
-      values = {key: float(entry.get()) for key, entry in self.fields.items()}
+      elevation = float(self.fields["elevation"].get())
+      azimuth = float(self.fields["azimuth"].get())
+      zoom = float(self.fields["zoom"].get())
+      steps = int(self.fields["steps"].get())
+      wait_time_ms = int(self.fields["wait_time_ms"].get())
     except ValueError:
       messagebox.showerror("Invalid Input",
                            "Please enter valid numeric values")
       return
-    # Call the callback with the extracted values
-    self.callback(values["elevation"], values["azimuth"], values["zoom"])
+    self.callback(elevation, azimuth, zoom, steps, wait_time_ms)
     self.destroy()
 
 
