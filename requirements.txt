@@ -5,3 +5,4 @@ torch
 pygame
 tk
 pytesseract
+tenacity

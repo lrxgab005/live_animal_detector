@@ -11,6 +11,11 @@ from requests.auth import HTTPDigestAuth
 import xml.etree.ElementTree as ET
 import config  # your config module provides HOST, PORT, USER, PASSWORD
 import numpy as np
+from tenacity import retry, stop_after_attempt, wait_fixed
+import logging
+
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s: %(message)s")
 
 
 class PTZCamera:
@@ -30,12 +35,14 @@ class PTZCamera:
     self.session.headers.update({"Content-Type": "text/xml"})
     self.base_url = f"http://{host}:{port}/ISAPI/PTZCtrl/channels/{channel}"
 
+  @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
   def _put(self, endpoint, xml_data, timeout=3):
     url = f"{self.base_url}/{endpoint}"
     response = self.session.put(url, data=xml_data, timeout=timeout)
     response.raise_for_status()
     return response.text
 
+  @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
   def _post(self, endpoint, xml_data, timeout=3):
     url = f"{self.base_url}/{endpoint}"
     response = self.session.post(url, data=xml_data, timeout=timeout)
@@ -67,6 +74,7 @@ class PTZCamera:
                 """
     return self._put("absolute", xml_data)
 
+  @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
   def get_status(self):
     status_url = f"{self.base_url}/status"
     response = self.session.get(status_url, timeout=3)
@@ -90,6 +98,7 @@ class PTZCamera:
                 """
     return self._post("presets", xml_data)
 
+  @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
   def list_presets(self):
     url = f"{self.base_url}/presets"
     response = self.session.get(url, timeout=3)
@@ -129,10 +138,10 @@ class PTZControllerUI:
   def move_timed(self, pan, tilt, zoom, duration):
     try:
       self.camera.continuous_move(pan, tilt, zoom)
-      print("Status:", self.camera.get_status())
+      logging.info("Status:", self.camera.get_status())
       self.root.after(duration, self.stop)
     except Exception as e:
-      print("Error during timed move:", e)
+      logging.error("Error during timed move:", e)
 
   def start_continuous_move(self, pan, tilt, zoom):
     self._keep_moving = True
@@ -145,7 +154,7 @@ class PTZControllerUI:
       try:
         self.camera.continuous_move(pan, tilt, zoom)
       except Exception as e:
-        print("Error during continuous move:", e)
+        logging.error("Error during continuous move:", e)
       self.root.after(self.continuous_interval_ms,
                       self._schedule_continuous_move)
 
@@ -154,26 +163,7 @@ class PTZControllerUI:
     try:
       self.camera.stop()
     except Exception as e:
-      print("Error stopping movement:", e)
-
-  def get_status(self):
-    try:
-      return self.camera.get_status()
-    except Exception as e:
-      print("Error retrieving camera status:", e)
-      return {}
-
-  def goto_preset(self, preset_id):
-    try:
-      self.camera.go_to_preset(preset_id)
-    except Exception as e:
-      print("Error going to preset:", e)
-
-  def save_preset(self, preset_id):
-    try:
-      self.camera.save_preset(preset_id)
-    except Exception as e:
-      print("Error saving preset:", e)
+      logging.error("Error stopping movement:", e)
 
   def show_move_to_dialog(self):
     AbsoluteMove(self.root, self.camera)
@@ -247,8 +237,9 @@ class AbsoluteMove(tk.Toplevel):
   def move_absolute(self, elevation, azimuth, zoom):
     try:
       self.camera.move_absolute(elevation, azimuth, zoom)
+      logging.info("Status:", self.camera.get_status())
     except Exception as e:
-      print("Error during absolute move:", e)
+      logging.error("Error during absolute move:", e)
 
 
 class AbsoluteMoveSteps(AbsoluteMove):
@@ -284,7 +275,7 @@ class AbsoluteMoveSteps(AbsoluteMove):
     try:
       current_status = self.camera.get_status()
     except Exception as e:
-      print("Error retrieving camera status:", e)
+      logging.error("Error retrieving camera status:", e)
       return
     elev_steps = np.linspace(current_status["elevation"], target_elevation,
                              steps)
@@ -298,6 +289,7 @@ class AbsoluteMoveSteps(AbsoluteMove):
       self.destroy()
       return
     elev, azim, zoom = self._steps_list.pop(0)
+    logging.info("Steps left:", len(self._steps_list))
     self.move_absolute(elev, azim, zoom)
     self.after(wait_time_ms, lambda: self._perform_step(wait_time_ms))
 
