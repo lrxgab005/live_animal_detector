@@ -157,41 +157,12 @@ class PTZControllerUI:
     except Exception as e:
       print("Error stopping movement:", e)
 
-  def move_absolute(self, elevation, azimuth, zoom):
+  def get_status(self):
     try:
-      self.camera.move_absolute(elevation, azimuth, zoom)
-    except Exception as e:
-      print("Error during absolute move:", e)
-
-  def move_absolute_with_speed(self,
-                               target_elevation,
-                               target_azimuth,
-                               target_zoom,
-                               steps=10,
-                               wait_time_ms=1000):
-    try:
-      current_status = self.camera.get_status()
+      return self.camera.get_status()
     except Exception as e:
       print("Error retrieving camera status:", e)
-      return
-
-    # Extract the current positions.
-    current_elev = current_status["elevation"]
-    current_azim = current_status["azimuth"]
-    current_zoom = current_status["zoom"]
-
-    # Compute the intermediate positions with numpy.linspace.
-    elev_steps = np.linspace(current_elev, target_elevation, steps)
-    azim_steps = np.linspace(current_azim, target_azimuth, steps)
-    zoom_steps = np.linspace(current_zoom, target_zoom, steps)
-
-    for elev, azim, zoom in zip(elev_steps, azim_steps, zoom_steps):
-      try:
-        # Send an absolute move command for the current step.
-        self.camera.move_absolute(elev, azim, zoom)
-        time.sleep(wait_time_ms / 1000)
-      except Exception as e:
-        print(f"Error at step: {elev}, {azim}, {zoom}: {e}")
+      return {}
 
   def goto_preset(self, preset_id):
     try:
@@ -205,127 +176,122 @@ class PTZControllerUI:
     except Exception as e:
       print("Error saving preset:", e)
 
-  def show_move_absolute_dialog(self):
-    AbsoluteMoveSpeedDialog(self.root, self.move_absolute_with_speed,
-                            self.camera.get_status())
+  def show_move_to_dialog(self):
+    AbsoluteMove(self.root, self.camera)
 
-  def show_save_preset_dialog(self):
-    PresetSaveDialog(self.root, self.save_preset)
-
-  def show_goto_preset_dialog(self):
-    PresetGotoDialog(self.root, self.goto_preset)
+  def show_move_to_steps_dialog(self):
+    AbsoluteMoveSteps(self.root, self.camera)
 
 
-class AbsoluteMoveSpeedDialog(tk.Toplevel):
+class AbsoluteMove(tk.Toplevel):
   """
-    A dialog that collects absolute move target values along with 
-    movement speed parameters. The dialog includes fields for elevation, 
-    azimuth, zoom, number of steps, and wait time (ms).
+    Base dialog for a single-step absolute move.
   """
 
-  def __init__(self, master, callback, status, steps=10, wait_time_ms=2000):
+  def __init__(self, master, camera, extra_fields={}, title="Absolute Move"):
     super().__init__(master)
-    self.callback = callback
-    self.title("Absolute Move with Speed")
+    self.camera = camera
+    self.status = camera.get_status()
+    self.title(title)
     self.grab_set()
+    self.fields = {"elevation": 0, "azimuth": 0, "zoom": 0}
+    self.fields.update(extra_fields)
+    self._build_ui()
 
-    self.field_names = [
-        "elevation", "azimuth", "zoom", "steps", "wait_time_ms"
-    ]
-    self.fields = {}
-    status["steps"] = steps
-    status["wait_time_ms"] = wait_time_ms
-
-    for i, field in enumerate(self.field_names):
-      tk.Label(self, text=field.capitalize() + ":").grid(row=i,
+  def _build_ui(self):
+    self.entries = {}
+    for i, (field, default) in enumerate(self.fields.items()):
+      tk.Label(self, text=f"{field.capitalize()}:").grid(row=i,
                                                          column=0,
                                                          padx=5,
                                                          pady=5)
       entry = tk.Entry(self)
       entry.grid(row=i, column=1, padx=5, pady=5)
-      entry.insert(0, str(status.get(field, "")))
-      self.fields[field] = entry
+      entry.insert(0, str(self.camera.get_status().get(field, default)))
+      self.entries[field] = entry
+    tk.Button(self, text="Move", command=self.on_ok).grid(row=len(self.fields),
+                                                          column=0,
+                                                          padx=5,
+                                                          pady=5)
+    tk.Button(self, text="Cancel",
+              command=self.destroy).grid(row=len(self.fields),
+                                         column=1,
+                                         padx=5,
+                                         pady=5)
 
-    btn_ok = tk.Button(self, text="Move", command=self.on_ok)
-    btn_ok.grid(row=len(self.field_names), column=0, padx=5, pady=5)
-    btn_cancel = tk.Button(self, text="Cancel", command=self.destroy)
-    btn_cancel.grid(row=len(self.field_names), column=1, padx=5, pady=5)
+  def _parse_fields(self, field_types):
+    values = {}
+    for field, conv in field_types.items():
+      try:
+        values[field] = conv(self.entries[field].get())
+      except ValueError:
+        messagebox.showerror("Invalid Input",
+                             "Please enter valid numeric values")
+        return None
+    return values
 
-  def on_ok(self):
-    try:
-      elevation = float(self.fields["elevation"].get())
-      azimuth = float(self.fields["azimuth"].get())
-      zoom = float(self.fields["zoom"].get())
-      steps = int(self.fields["steps"].get())
-      wait_time_ms = int(self.fields["wait_time_ms"].get())
-    except ValueError:
-      messagebox.showerror("Invalid Input",
-                           "Please enter valid numeric values")
+  def _on_ok(self, field_types, move_callback):
+    values = self._parse_fields(field_types)
+    if values is None:
       return
-    self.callback(elevation, azimuth, zoom, steps, wait_time_ms)
+    move_callback(**values)
     self.destroy()
 
+  def on_ok(self):
+    self._on_ok({
+        "elevation": float,
+        "azimuth": float,
+        "zoom": float
+    }, lambda elevation, azimuth, zoom: self.move_absolute(
+        elevation, azimuth, zoom))
 
-class PresetSaveDialog(tk.Toplevel):
+  def move_absolute(self, elevation, azimuth, zoom):
+    try:
+      self.camera.move_absolute(elevation, azimuth, zoom)
+    except Exception as e:
+      print("Error during absolute move:", e)
+
+
+class AbsoluteMoveSteps(AbsoluteMove):
   """
-    A dialog window that collects a preset ID to save the current position.
+    Dialog for an absolute move with step and wait time parameters.
   """
 
-  def __init__(self, master, callback):
-    super().__init__(master)
-    self.callback = callback
-    self.title("Save Preset")
-    self.grab_set()  # Make modal
-
-    tk.Label(self, text="Preset ID:").grid(row=0, column=0, padx=5, pady=5)
-    self.entry_preset = tk.Entry(self)
-    self.entry_preset.grid(row=0, column=1, padx=5, pady=5)
-
-    btn_ok = tk.Button(self, text="Save", command=self.on_ok)
-    btn_ok.grid(row=1, column=0, padx=5, pady=5)
-    btn_cancel = tk.Button(self, text="Cancel", command=self.destroy)
-    btn_cancel.grid(row=1, column=1, padx=5, pady=5)
+  def __init__(self,
+               master,
+               camera,
+               title="Stepped Absolute Move",
+               steps=20,
+               wait_time_ms=1500):
+    extra_fields = {"steps": steps, "wait_time_ms": wait_time_ms}
+    super().__init__(master, camera, extra_fields, title)
 
   def on_ok(self):
+    self._on_ok(
+        {
+            "elevation": float,
+            "azimuth": float,
+            "zoom": float,
+            "steps": int,
+            "wait_time_ms": int,
+        }, lambda elevation, azimuth, zoom,
+        steps, wait_time_ms: self.move_absolute_with_steps(
+            elevation, azimuth, zoom, steps, wait_time_ms))
+
+  def move_absolute_with_steps(self, target_elevation, target_azimuth,
+                               target_zoom, steps, wait_time_ms):
     try:
-      preset_id = int(self.entry_preset.get())
-    except ValueError:
-      messagebox.showerror("Invalid Input",
-                           "Please enter a valid numeric preset ID")
+      current_status = self.camera.get_status()
+    except Exception as e:
+      print("Error retrieving camera status:", e)
       return
-    self.callback(preset_id)
-    self.destroy()
-
-
-class PresetGotoDialog(tk.Toplevel):
-  """
-    A dialog window that collects a preset ID to move to a saved position.
-  """
-
-  def __init__(self, master, callback):
-    super().__init__(master)
-    self.callback = callback
-    self.title("Go To Preset")
-    self.grab_set()  # Make modal
-
-    tk.Label(self, text="Preset ID:").grid(row=0, column=0, padx=5, pady=5)
-    self.entry_preset = tk.Entry(self)
-    self.entry_preset.grid(row=0, column=1, padx=5, pady=5)
-
-    btn_ok = tk.Button(self, text="Go", command=self.on_ok)
-    btn_ok.grid(row=1, column=0, padx=5, pady=5)
-    btn_cancel = tk.Button(self, text="Cancel", command=self.destroy)
-    btn_cancel.grid(row=1, column=1, padx=5, pady=5)
-
-  def on_ok(self):
-    try:
-      preset_id = int(self.entry_preset.get())
-    except ValueError:
-      messagebox.showerror("Invalid Input",
-                           "Please enter a valid numeric preset ID")
-      return
-    self.callback(preset_id)
-    self.destroy()
+    elev_steps = np.linspace(current_status["elevation"], target_elevation,
+                             steps)
+    azim_steps = np.linspace(current_status["azimuth"], target_azimuth, steps)
+    zoom_steps = np.linspace(current_status["zoom"], target_zoom, steps)
+    for elev, azim, zoom in zip(elev_steps, azim_steps, zoom_steps):
+      self.move_absolute(elev, azim, zoom)
+      time.sleep(wait_time_ms / 1000)
 
 
 def main():
@@ -438,19 +404,15 @@ def main():
 
   # --- New buttons for custom absolute move and preset management ---
   btn_abs_move = tk.Button(root,
-                           text="Absolute Move",
-                           command=ctrl.show_move_absolute_dialog)
-  btn_save_preset = tk.Button(root,
-                              text="Save Preset",
-                              command=ctrl.show_save_preset_dialog)
-  btn_goto_preset = tk.Button(root,
-                              text="Go To Preset",
-                              command=ctrl.show_goto_preset_dialog)
+                           text="Move To",
+                           command=ctrl.show_move_to_dialog)
+  btn_abs_move_step = tk.Button(root,
+                                text="Move To in Steps",
+                                command=ctrl.show_move_to_steps_dialog)
 
   # Place these new buttons on a new row below the existing controls:
   btn_abs_move.grid(row=5, column=0, columnspan=2, padx=5, pady=10)
-  btn_save_preset.grid(row=5, column=2, columnspan=2, padx=5, pady=10)
-  btn_goto_preset.grid(row=5, column=4, columnspan=2, padx=5, pady=10)
+  btn_abs_move_step.grid(row=5, column=2, columnspan=2, padx=5, pady=10)
 
   root.mainloop()
 
