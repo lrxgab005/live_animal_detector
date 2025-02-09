@@ -11,7 +11,6 @@ from requests.auth import HTTPDigestAuth
 import xml.etree.ElementTree as ET
 import config  # your config module provides HOST, PORT, USER, PASSWORD
 import numpy as np
-import time
 
 
 class PTZCamera:
@@ -267,16 +266,18 @@ class AbsoluteMoveSteps(AbsoluteMove):
     super().__init__(master, camera, extra_fields, title)
 
   def on_ok(self):
-    self._on_ok(
-        {
-            "elevation": float,
-            "azimuth": float,
-            "zoom": float,
-            "steps": int,
-            "wait_time_ms": int,
-        }, lambda elevation, azimuth, zoom,
-        steps, wait_time_ms: self.move_absolute_with_steps(
-            elevation, azimuth, zoom, steps, wait_time_ms))
+    values = self._parse_fields({
+        "elevation": float,
+        "azimuth": float,
+        "zoom": float,
+        "steps": int,
+        "wait_time_ms": int,
+    })
+    if values is None:
+      return
+    self.move_absolute_with_steps(values["elevation"], values["azimuth"],
+                                  values["zoom"], values["steps"],
+                                  values["wait_time_ms"])
 
   def move_absolute_with_steps(self, target_elevation, target_azimuth,
                                target_zoom, steps, wait_time_ms):
@@ -289,9 +290,16 @@ class AbsoluteMoveSteps(AbsoluteMove):
                              steps)
     azim_steps = np.linspace(current_status["azimuth"], target_azimuth, steps)
     zoom_steps = np.linspace(current_status["zoom"], target_zoom, steps)
-    for elev, azim, zoom in zip(elev_steps, azim_steps, zoom_steps):
-      self.move_absolute(elev, azim, zoom)
-      time.sleep(wait_time_ms / 1000)
+    self._steps_list = list(zip(elev_steps, azim_steps, zoom_steps))
+    self._perform_step(wait_time_ms)
+
+  def _perform_step(self, wait_time_ms):
+    if not self._steps_list:
+      self.destroy()
+      return
+    elev, azim, zoom = self._steps_list.pop(0)
+    self.move_absolute(elev, azim, zoom)
+    self.after(wait_time_ms, lambda: self._perform_step(wait_time_ms))
 
 
 def main():
