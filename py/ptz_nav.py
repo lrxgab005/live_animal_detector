@@ -4,7 +4,6 @@ Expanded PTZ controller with timed moves, continuous moves, absolute moves,
 and preset management (save preset / go to preset).
 """
 
-import config
 import logging
 import ptz_widgets as pw
 

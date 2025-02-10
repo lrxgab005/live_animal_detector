@@ -1,0 +1,32 @@
+[
+  {
+    "start_pose": {
+      "pan": 300,
+      "tilt": 18,
+      "zoom": 147,
+      "wait_time_ms": 3000
+    },
+    "end_pose": {
+      "pan": 200,
+      "tilt": -16,
+      "zoom": 147,
+      "wait_time_ms": 3000
+    },
+    "nr_steps": 30
+  },
+  {
+    "start_pose": {
+      "pan": 200,
+      "tilt": -16,
+      "zoom": 147,
+      "wait_time_ms": 3000
+    },
+    "end_pose": {
+      "pan": 90,
+      "tilt": -5,
+      "zoom": 147,
+      "wait_time_ms": 3000
+    },
+    "nr_steps": 30
+  }
+]
