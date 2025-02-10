@@ -1,0 +1,30 @@
+[
+  {
+    "start_position": {
+      "elevation": 23,
+      "azimuth": 300,
+      "absoluteZoom": 147
+    },
+    "end_position": {
+      "elevation": 0,
+      "azimuth": 90,
+      "absoluteZoom": 147
+    },
+    "nr_steps": 50,
+    "wait_time_ms": 3000
+  },
+  {
+    "start_position": {
+      "elevation": 23,
+      "azimuth": 300,
+      "absoluteZoom": 50
+    },
+    "end_position": {
+      "elevation": 0,
+      "azimuth": 90,
+      "absoluteZoom": 50
+    },
+    "nr_steps": 50,
+    "wait_time_ms": 3000
+  }
+]

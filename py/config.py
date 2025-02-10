@@ -32,6 +32,7 @@ DATA_PATH = os.path.join(ROOT_PATH, "data")
 SOUNDS_PATH = os.path.join(DATA_PATH, "sounds")
 IMGS_PATH = os.path.join(DATA_PATH, "images")
 CAM_CONFIG_PATH = os.path.join(DATA_PATH, "cam_configs")
+CAM_MOVE_SEQS_PATH = os.path.join(DATA_PATH, "cam_move_sequences")
 
 # Ensure paths are created if they don't exist
 os.makedirs(SOUNDS_PATH, exist_ok=True)

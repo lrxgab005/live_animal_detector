@@ -5,14 +5,17 @@ and preset management (save preset / go to preset).
 """
 
 import tkinter as tk
-from tkinter import messagebox  # For error dialogs
+from tkinter import messagebox
 import requests
 from requests.auth import HTTPDigestAuth
 import xml.etree.ElementTree as ET
-import config  # your config module provides HOST, PORT, USER, PASSWORD
+import config
 import numpy as np
 from tenacity import retry, stop_after_attempt, wait_fixed
 import logging
+import glob
+import json
+import os
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s: %(message)s")
@@ -166,25 +169,63 @@ class PTZControllerUI:
       logging.error("Error stopping movement:", e)
 
   def show_move_to_dialog(self):
-    AbsoluteMove(self.root, self.camera)
+    AbsoluteMoveDialog(self.root, self.camera)
 
   def show_move_to_steps_dialog(self):
-    AbsoluteMoveSteps(self.root, self.camera)
+    SteppedAbsoluteMoveDialog(self.root, self.camera)
+
+  def show_move_sequence_dialog(self, seq_folder_path):
+    AbsoluteMoveSequenceDialog(self.root, self.camera, seq_folder_path)
 
 
-class AbsoluteMove(tk.Toplevel):
+class SteppedMover:
   """
-    Base dialog for a single-step absolute move.
+    Executes a sequence of camera move steps asynchronously with a delay.
   """
 
-  def __init__(self, master, camera, extra_fields={}, title="Absolute Move"):
+  def __init__(self, widget, camera, wait_time_ms):
+    self.widget = widget
+    self.camera = camera
+    self.wait_time_ms = wait_time_ms
+
+  def execute(self, steps_list, callback=None):
+    if not steps_list:
+      if callback:
+        callback()
+      return
+    try:
+      step = steps_list.pop(0)
+      logging.info(f"Steps Remaining: {len(steps_list)}")
+      self.camera.move_absolute(*step)
+      logging.info("Status: %s", self.camera.get_status())
+    except Exception as e:
+      logging.error("Error during move: %s", e)
+      if callback:
+        callback()
+      return
+    self.widget.after(self.wait_time_ms,
+                      lambda: self.execute(steps_list, callback))
+
+
+class BaseMoveDialog(tk.Toplevel):
+  """
+    Base dialog for move actions with dynamic fields and a callback.
+  """
+
+  def __init__(self,
+               master,
+               camera,
+               fields,
+               field_types,
+               move_callback,
+               title="Move"):
     super().__init__(master)
     self.camera = camera
-    self.status = camera.get_status()
     self.title(title)
     self.grab_set()
-    self.fields = {"elevation": 0, "azimuth": 0, "zoom": 0}
-    self.fields.update(extra_fields)
+    self.fields = fields.copy()  # default values for each field
+    self.field_types = field_types  # e.g. {"elevation": float, ...}
+    self.move_callback = move_callback
     self._build_ui()
 
   def _build_ui(self):
@@ -196,6 +237,7 @@ class AbsoluteMove(tk.Toplevel):
                                                          pady=5)
       entry = tk.Entry(self)
       entry.grid(row=i, column=1, padx=5, pady=5)
+      # Prefill with camera status if available; fallback to default
       entry.insert(0, str(self.camera.get_status().get(field, default)))
       self.entries[field] = entry
     tk.Button(self, text="Move", command=self.on_ok).grid(row=len(self.fields),
@@ -208,9 +250,9 @@ class AbsoluteMove(tk.Toplevel):
                                          padx=5,
                                          pady=5)
 
-  def _parse_fields(self, field_types):
+  def _parse_fields(self):
     values = {}
-    for field, conv in field_types.items():
+    for field, conv in self.field_types.items():
       try:
         values[field] = conv(self.entries[field].get())
       except ValueError:
@@ -219,79 +261,173 @@ class AbsoluteMove(tk.Toplevel):
         return None
     return values
 
-  def _on_ok(self, field_types, move_callback):
-    values = self._parse_fields(field_types)
+  def on_ok(self):
+    values = self._parse_fields()
     if values is None:
       return
-    move_callback(**values)
+    self.move_callback(**values)
     self.destroy()
 
-  def on_ok(self):
-    self._on_ok({
-        "elevation": float,
-        "azimuth": float,
-        "zoom": float
-    }, lambda elevation, azimuth, zoom: self.move_absolute(
-        elevation, azimuth, zoom))
+
+class AbsoluteMoveDialog(BaseMoveDialog):
+  """
+    Dialog for an immediate absolute move.
+  """
+
+  def __init__(self, master, camera, title="Absolute Move"):
+    fields = {"elevation": 0, "azimuth": 0, "zoom": 0}
+    field_types = {"elevation": float, "azimuth": float, "zoom": float}
+    super().__init__(master, camera, fields, field_types, self.move_absolute,
+                     title)
 
   def move_absolute(self, elevation, azimuth, zoom):
     try:
       self.camera.move_absolute(elevation, azimuth, zoom)
-      logging.info("Status:", self.camera.get_status())
+      logging.info("Status: %s", self.camera.get_status())
     except Exception as e:
-      logging.error("Error during absolute move:", e)
+      logging.error("Error during absolute move: %s", e)
 
 
-class AbsoluteMoveSteps(AbsoluteMove):
+class SteppedAbsoluteMoveDialog(BaseMoveDialog):
   """
-    Dialog for an absolute move with step and wait time parameters.
+    Dialog for an absolute move executed in steps.
+  """
+
+  def __init__(self, master, camera, title="Stepped Absolute Move"):
+    fields = {
+        "elevation": 0,
+        "azimuth": 0,
+        "zoom": 0,
+        "steps": 20,
+        "wait_time_ms": 1500
+    }
+    field_types = {
+        "elevation": float,
+        "azimuth": float,
+        "zoom": float,
+        "steps": int,
+        "wait_time_ms": int
+    }
+    super().__init__(master, camera, fields, field_types,
+                     self.move_absolute_steps, title)
+
+  def on_ok(self):
+    values = self._parse_fields()
+    if values is None:
+      return
+    self.move_absolute_steps(**values)
+
+  def move_absolute_steps(self, elevation, azimuth, zoom, steps, wait_time_ms):
+    try:
+      current_status = self.camera.get_status()
+    except Exception as e:
+      logging.error("Error retrieving camera status: %s", e)
+      return
+
+    elev_steps = np.linspace(current_status["elevation"], elevation, steps)
+    azim_steps = np.linspace(current_status["azimuth"], azimuth, steps)
+    zoom_steps = np.linspace(current_status["zoom"], zoom, steps)
+    steps_list = list(zip(elev_steps, azim_steps, zoom_steps))
+    executor = SteppedMover(self, self.camera, wait_time_ms)
+    executor.execute(steps_list, callback=self.destroy)
+
+
+class AbsoluteMoveSequenceDialog(tk.Toplevel):
+  """
+    Dialog for selecting and executing a sequence of stepped absolute moves
+    from predefined JSON sequences.
   """
 
   def __init__(self,
                master,
                camera,
-               title="Stepped Absolute Move",
-               steps=20,
-               wait_time_ms=1500):
-    extra_fields = {"steps": steps, "wait_time_ms": wait_time_ms}
-    super().__init__(master, camera, extra_fields, title)
+               seq_folder_path,
+               title="Absolute Move Sequence"):
+    super().__init__(master)
+    self.camera = camera
+    self.title(title)
+    self.grab_set()
+    self.sequences_dict = {}
+    self._load_sequences(seq_folder_path)
+    self._build_ui()
+    self.sequence_queue = []
 
-  def on_ok(self):
-    values = self._parse_fields({
-        "elevation": float,
-        "azimuth": float,
-        "zoom": float,
-        "steps": int,
-        "wait_time_ms": int,
-    })
-    if values is None:
+  def _load_sequences(self, seq_folder_path):
+    files = glob.glob(os.path.join(seq_folder_path, "*.json"))
+    for f in files:
+      try:
+        with open(f, "r") as fp:
+          sequences = json.load(fp)
+        basename = os.path.basename(f)
+        self.sequences_dict[basename] = sequences
+      except Exception as e:
+        logging.error("Error loading %s: %s", f, e)
+
+  def _build_ui(self):
+    tk.Label(self, text="Select Sequence File:").grid(row=0,
+                                                      column=0,
+                                                      padx=5,
+                                                      pady=5)
+    self.sequence_var = tk.StringVar(self)
+    options = list(self.sequences_dict.keys())
+    if options:
+      self.sequence_var.set(options[0])
+    tk.OptionMenu(self, self.sequence_var, *options).grid(row=0,
+                                                          column=1,
+                                                          padx=5,
+                                                          pady=5)
+    tk.Button(self, text="Run", command=self.on_run).grid(row=1,
+                                                          column=0,
+                                                          padx=5,
+                                                          pady=5)
+    tk.Button(self, text="Cancel", command=self.destroy).grid(row=1,
+                                                              column=1,
+                                                              padx=5,
+                                                              pady=5)
+
+  def on_run(self):
+    file_key = self.sequence_var.get()
+    if file_key not in self.sequences_dict:
+      logging.error("Selected file not found")
       return
-    self.move_absolute_with_steps(values["elevation"], values["azimuth"],
-                                  values["zoom"], values["steps"],
-                                  values["wait_time_ms"])
+    self.sequence_queue = self.sequences_dict[file_key][:]
+    self.execute_next_sequence()
 
-  def move_absolute_with_steps(self, target_elevation, target_azimuth,
-                               target_zoom, steps, wait_time_ms):
-    try:
-      current_status = self.camera.get_status()
-    except Exception as e:
-      logging.error("Error retrieving camera status:", e)
-      return
-    elev_steps = np.linspace(current_status["elevation"], target_elevation,
-                             steps)
-    azim_steps = np.linspace(current_status["azimuth"], target_azimuth, steps)
-    zoom_steps = np.linspace(current_status["zoom"], target_zoom, steps)
-    self._steps_list = list(zip(elev_steps, azim_steps, zoom_steps))
-    self._perform_step(wait_time_ms)
-
-  def _perform_step(self, wait_time_ms):
-    if not self._steps_list:
+  def execute_next_sequence(self):
+    if not self.sequence_queue:
       self.destroy()
       return
-    elev, azim, zoom = self._steps_list.pop(0)
-    logging.info("Steps left:", len(self._steps_list))
-    self.move_absolute(elev, azim, zoom)
-    self.after(wait_time_ms, lambda: self._perform_step(wait_time_ms))
+
+    sequence = self.sequence_queue.pop(0)
+    logging.info(f"{len(self.sequence_queue)}: Running sequence: {sequence}")
+    self.run_sequence(sequence, self.execute_next_sequence)
+
+  def run_sequence(self, sequence, callback):
+    try:
+      start = sequence["start_position"]
+      end = sequence["end_position"]
+      steps = sequence["nr_steps"]
+      wait_time_ms = sequence["wait_time_ms"]
+    except KeyError as e:
+      logging.error("Missing key in sequence: %s", e)
+      callback()
+      return
+    try:
+      start_zoom = start.get("absoluteZoom", start.get("zoom", 0))
+      self.camera.move_absolute(start["elevation"], start["azimuth"],
+                                start_zoom)
+    except Exception as e:
+      logging.error("Error moving to start position: %s", e)
+      callback()
+      return
+    elev_steps = np.linspace(start["elevation"], end["elevation"], steps)
+    azim_steps = np.linspace(start["azimuth"], end["azimuth"], steps)
+    zoom_steps = np.linspace(start.get("absoluteZoom", start.get("zoom", 0)),
+                             end.get("absoluteZoom", end.get("zoom", 0)),
+                             steps)
+    steps_list = list(zip(elev_steps, azim_steps, zoom_steps))
+    executor = SteppedMover(self, self.camera, wait_time_ms)
+    executor.execute(steps_list, callback=callback)
 
 
 def main():
@@ -384,7 +520,6 @@ def main():
       text="--Zoom",
       command=lambda: setattr(ctrl, 'vel_zoom', max(ctrl.vel_zoom - 10, 10)))
 
-  # --- Layout (grid as per your original design) ---
   btn_lleft.grid(row=1, column=0, padx=5, pady=5)
   btn_left.grid(row=1, column=1, padx=5, pady=5)
   btn_up.grid(row=0, column=2, padx=5, pady=5)
@@ -402,17 +537,20 @@ def main():
   btn_inc_zoom.grid(row=3, column=5, padx=5, pady=5)
   btn_dec_zoom.grid(row=4, column=5, padx=5, pady=5)
 
-  # --- New buttons for custom absolute move and preset management ---
   btn_abs_move = tk.Button(root,
                            text="Move To",
                            command=ctrl.show_move_to_dialog)
   btn_abs_move_step = tk.Button(root,
                                 text="Move To in Steps",
                                 command=ctrl.show_move_to_steps_dialog)
+  btn_abs_move_seq = tk.Button(root,
+                               text="Move Sequence",
+                               command=lambda: ctrl.show_move_sequence_dialog(
+                                   config.CAM_MOVE_SEQS_PATH))
 
-  # Place these new buttons on a new row below the existing controls:
   btn_abs_move.grid(row=5, column=0, columnspan=2, padx=5, pady=10)
   btn_abs_move_step.grid(row=5, column=2, columnspan=2, padx=5, pady=10)
+  btn_abs_move_seq.grid(row=5, column=4, columnspan=2, padx=5, pady=10)
 
   root.mainloop()
 
