@@ -3,42 +3,45 @@
     "start_pose": {
       "pan": 300,
       "tilt": 18,
-      "zoom": 50
+      "zoom": 50,
+      "wait_time_ms": 3000
     },
     "end_pose": {
       "pan": 90,
       "tilt": -3,
-      "zoom": 50
+      "zoom": 50,
+      "wait_time_ms": 3000
     },
-    "nr_steps": 30,
-    "wait_time_ms": 3000
+    "nr_steps": 30
   },
   {
     "start_pose": {
       "pan": 300,
       "tilt": 18,
-      "zoom": 147
+      "zoom": 147,
+      "wait_time_ms": 3000
     },
     "end_pose": {
       "pan": 200,
       "tilt": -10,
-      "zoom": 147
+      "zoom": 147,
+      "wait_time_ms": 3000
     },
-    "nr_steps": 20,
-    "wait_time_ms": 3000
+    "nr_steps": 20
   },
   {
     "start_pose": {
       "pan": 200,
       "tilt": -10,
-      "zoom": 147
+      "zoom": 147,
+      "wait_time_ms": 3000
     },
     "end_pose": {
       "pan": 90,
       "tilt": 0,
-      "zoom": 147
+      "zoom": 147,
+      "wait_time_ms": 3000
     },
-    "nr_steps": 20,
-    "wait_time_ms": 3000
+    "nr_steps": 20
   }
 ]

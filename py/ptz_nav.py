@@ -191,11 +191,12 @@ class SteppedAbsoluteMoveDialog(BaseMoveDialog):
     self.move_absolute_steps(**values)
 
   def move_absolute_steps(self, pan, tilt, zoom, steps, wait_time_ms):
-    start_pose = cpg.PTZCameraPose().load_from_dict(self.camera.get_status())
-    end_pose = cpg.PTZCameraPose(pan, tilt, zoom)
+    start_pose = cpg.PTZCameraPose(wait_time_ms=wait_time_ms)
+    start_pose.load_from_dict(self.camera.get_status())
+    end_pose = cpg.PTZCameraPose(pan, tilt, zoom, wait_time_ms)
     stepped_move = cpg.SteppedMove(start_pose, end_pose, steps)
 
-    step_mover = cpg.SteppedMover(self, self.camera, wait_time_ms)
+    step_mover = cpg.SteppedMover(self, self.camera)
     step_mover.execute(stepped_move, callback=self.destroy)
 
 
@@ -215,6 +216,7 @@ class AbsoluteMoveSequenceDialog(tk.Toplevel):
     self.title(title)
     self.grab_set()
     self.sequences_dict = {}
+    self.seq_moves = cpg.SteppedMove()
     self._load_sequences(seq_folder_path)
     self._build_ui()
     self.sequence_queue = []
@@ -257,27 +259,17 @@ class AbsoluteMoveSequenceDialog(tk.Toplevel):
     if file_key not in self.sequences_dict:
       logging.error("Selected file not found")
       return
-    self.sequence_queue = self.sequences_dict[file_key][:]
-    self.execute_next_sequence()
 
-  def execute_next_sequence(self):
-    if not self.sequence_queue:
-      self.destroy()
-      return
+    seq_moves = cpg.SteppedMove()
+    for sequence in self.sequences_dict[file_key]:
+      start_pose = cpg.PTZCameraPose().load_from_dict(
+          sequence.get("start_pose"))
+      end_pose = cpg.PTZCameraPose().load_from_dict(sequence.get("end_pose"))
+      seq_moves.add_linspaced_steps(start_pose, end_pose,
+                                    sequence.get("nr_steps"))
 
-    sequence = self.sequence_queue.pop(0)
-    logging.info(f"{len(self.sequence_queue)}: Running sequence: {sequence}")
-    self.run_sequence(sequence, self.execute_next_sequence)
-
-  def run_sequence(self, sequence, callback):
-    start_pose = cpg.PTZCameraPose().load_from_dict(sequence.get("start_pose"))
-    end_pose = cpg.PTZCameraPose().load_from_dict(sequence.get("end_pose"))
-    stepped_move = cpg.SteppedMove(start_pose, end_pose,
-                                   sequence.get("nr_steps"))
-
-    step_mover = cpg.SteppedMover(self, self.camera,
-                                  sequence.get("wait_time_ms"))
-    step_mover.execute(stepped_move, callback=callback)
+    step_mover = cpg.SteppedMover(self, self.camera)
+    step_mover.execute(seq_moves, callback=self.on_run)
 
 
 def main():
