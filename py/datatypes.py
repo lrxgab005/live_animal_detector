@@ -12,6 +12,7 @@ class DetectionFrame:
       default_factory=lambda: np.empty(0, dtype=np.int32))
   scores: np.ndarray = dataclasses.field(
       default_factory=lambda: np.empty(0, dtype=np.float32))
+  timestamp: float = 0.0
 
   @property
   def has_detections(self) -> bool:
@@ -38,3 +39,11 @@ class DetectionFrame:
     self.bboxes = self.bboxes[mask]
     self.class_ids = self.class_ids[mask]
     self.scores = self.scores[mask]
+
+  def to_dict(self):
+    return {
+        "bboxes": self.bboxes.tolist(),
+        "class_ids": self.class_ids.tolist(),
+        "scores": self.scores.tolist(),
+        "timestamp": self.timestamp,
+    }

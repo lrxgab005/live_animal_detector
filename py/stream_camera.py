@@ -53,7 +53,7 @@ def frame_reader(streamer, frame_queue):
     frame = streamer.read_frame()
     if frame is None:
       break
-    frame_queue.put(frame)
+    frame_queue.put((frame, time.time()))
   frame_queue.put(None)
 
 
@@ -129,9 +129,10 @@ def main():
       logging.debug("Frame Queue Empty")
       time.sleep(0.1)
 
-    frame = frame_queue.get(timeout=10)
+    frame, frame_ts = frame_queue.get(timeout=10)
     while not frame_queue.empty() and not args.video_file:
-      frame = frame_queue.get_nowait()  # Drop old queue frames if real-time
+      frame, frame_ts = frame_queue.get_nowait(
+      )  # Drop old queue frames if real-time
 
     if frame is None:
       break
@@ -139,7 +140,7 @@ def main():
     latency = (time.time() - start_time) * 1000.0
     stats.update(latency)
 
-    detection_frame = detector.detect(frame)
+    detection_frame = detector.detect(frame, frame_ts)
     detection_frame.apply_min_confidence_filter(config.YOLO_MIN_CONFIDENCE)
     detection_frame.apply_class_filter(config.YOLO_CLASS_IDS)
 

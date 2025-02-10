@@ -15,7 +15,7 @@ class Detector:
       logging.info("Apple Silicon detected. Using GPU.")
       self.device = 'mps'
 
-  def detect(self, img):
+  def detect(self, img, timestamp=None):
     results = self.model.predict(source=img.copy(),
                                  save=False,
                                  save_txt=False,
@@ -27,4 +27,4 @@ class Detector:
     class_ids = np.array(result.boxes.cls.cpu(), dtype="int")
     scores = np.array(result.boxes.conf.cpu(), dtype="float")
 
-    return dt.DetectionFrame(img, bboxes, class_ids, scores)
+    return dt.DetectionFrame(img, bboxes, class_ids, scores, timestamp)
