@@ -1,44 +1,44 @@
 [
   {
-    "start_position": {
-      "elevation": 18,
-      "azimuth": 300,
-      "absoluteZoom": 50
+    "start_pose": {
+      "pan": 300,
+      "tilt": 18,
+      "zoom": 50
     },
-    "end_position": {
-      "elevation": -3,
-      "azimuth": 90,
-      "absoluteZoom": 50
+    "end_pose": {
+      "pan": 90,
+      "tilt": -3,
+      "zoom": 50
     },
-    "nr_steps": 30,
-    "wait_time_ms": 3000
+    "nr_steps": 15,
+    "wait_time_ms": 1000
   },
   {
-    "start_position": {
-      "elevation": 18,
-      "azimuth": 300,
-      "absoluteZoom": 147
+    "start_pose": {
+      "pan": 300,
+      "tilt": 18,
+      "zoom": 147
     },
-    "end_position": {
-      "elevation": -10,
-      "azimuth": 200,
-      "absoluteZoom": 147
+    "end_pose": {
+      "pan": 200,
+      "tilt": -10,
+      "zoom": 147
     },
-    "nr_steps": 20,
-    "wait_time_ms": 3000
+    "nr_steps": 10,
+    "wait_time_ms": 1000
   },
   {
-    "start_position": {
-      "elevation": -10,
-      "azimuth": 200,
-      "absoluteZoom": 147
+    "start_pose": {
+      "pan": 200,
+      "tilt": -10,
+      "zoom": 147
     },
-    "end_position": {
-      "elevation": 0,
-      "azimuth": 90,
-      "absoluteZoom": 147
+    "end_pose": {
+      "pan": 90,
+      "tilt": 0,
+      "zoom": 147
     },
-    "nr_steps": 20,
-    "wait_time_ms": 3000
+    "nr_steps": 10,
+    "wait_time_ms": 1000
   }
 ]

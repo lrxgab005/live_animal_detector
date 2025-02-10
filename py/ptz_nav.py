@@ -6,114 +6,16 @@ and preset management (save preset / go to preset).
 
 import tkinter as tk
 from tkinter import messagebox
-import requests
-from requests.auth import HTTPDigestAuth
-import xml.etree.ElementTree as ET
 import config
-import numpy as np
-from tenacity import retry, stop_after_attempt, wait_fixed
 import logging
 import glob
 import json
 import os
+from ptz_network_lib import PTZCamera
+import camera_pose_gen as cpg
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s: %(message)s")
-
-
-class PTZCamera:
-  """
-    Low-level API wrapper for the PTZ camera.
-    Provides methods for continuous and absolute moves as well as preset management.
-  """
-
-  def __init__(self, host, port, user, password, channel=1):
-    self.host = host
-    self.port = port
-    self.user = user
-    self.password = password
-    self.channel = channel
-    self.session = requests.Session()
-    self.session.auth = HTTPDigestAuth(user, password)
-    self.session.headers.update({"Content-Type": "text/xml"})
-    self.base_url = f"http://{host}:{port}/ISAPI/PTZCtrl/channels/{channel}"
-
-  @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-  def _put(self, endpoint, xml_data, timeout=3):
-    url = f"{self.base_url}/{endpoint}"
-    response = self.session.put(url, data=xml_data, timeout=timeout)
-    response.raise_for_status()
-    return response.text
-
-  @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-  def _post(self, endpoint, xml_data, timeout=3):
-    url = f"{self.base_url}/{endpoint}"
-    response = self.session.post(url, data=xml_data, timeout=timeout)
-    response.raise_for_status()
-    return response.text
-
-  def continuous_move(self, pan, tilt, zoom):
-    xml_data = f"""
-                <PTZData>
-                  <pan>{pan}</pan>
-                  <tilt>{tilt}</tilt>
-                  <zoom>{zoom}</zoom>
-                </PTZData>
-                """
-    return self._put("continuous", xml_data)
-
-  def stop(self):
-    return self.continuous_move(0, 0, 0)
-
-  def move_absolute(self, elevation, azimuth, zoom):
-    xml_data = f"""
-                <PTZData>
-                  <AbsoluteHigh>
-                  <elevation>{int(elevation)}</elevation>
-                  <azimuth>{int(azimuth * 10)}</azimuth>
-                  <absoluteZoom>{int(zoom)}</absoluteZoom>
-                  </AbsoluteHigh>
-                </PTZData>
-                """
-    return self._put("absolute", xml_data)
-
-  @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-  def get_status(self):
-    status_url = f"{self.base_url}/status"
-    response = self.session.get(status_url, timeout=3)
-    response.raise_for_status()
-
-    ns = {"hik": "http://www.hikvision.com/ver20/XMLSchema"}
-    root = ET.fromstring(response.text)
-    elevation = int(root.find(".//hik:AbsoluteHigh/hik:elevation", ns).text)
-    azimuth = int(root.find(".//hik:AbsoluteHigh/hik:azimuth", ns).text)
-    zoom = int(root.find(".//hik:AbsoluteHigh/hik:absoluteZoom", ns).text)
-    return {"elevation": elevation, "azimuth": azimuth / 10.0, "zoom": zoom}
-
-  def go_to_preset(self, preset_id):
-    return self._put(f"presets/{preset_id}/goto", "")
-
-  def save_preset(self, preset_id):
-    xml_data = f"""<PTZPreset>
-                    <id>{preset_id}</id>
-                    <presetName>{preset_id}</presetName>
-                  </PTZPreset>
-                """
-    return self._post("presets", xml_data)
-
-  @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-  def list_presets(self):
-    url = f"{self.base_url}/presets"
-    response = self.session.get(url, timeout=3)
-    response.raise_for_status()
-    presets = {}
-    ns = {"hik": "http://www.hikvision.com/ver20/XMLSchema"}
-    root = ET.fromstring(response.text)
-    for preset in root.findall(".//hik:PTZPreset", ns):
-      pid = preset.find("hik:id", ns).text
-      name = preset.find("hik:presetName", ns).text
-      presets[pid] = name
-    return presets
 
 
 class PTZControllerUI:
@@ -176,35 +78,6 @@ class PTZControllerUI:
 
   def show_move_sequence_dialog(self, seq_folder_path):
     AbsoluteMoveSequenceDialog(self.root, self.camera, seq_folder_path)
-
-
-class SteppedMover:
-  """
-    Executes a sequence of camera move steps asynchronously with a delay.
-  """
-
-  def __init__(self, widget, camera, wait_time_ms):
-    self.widget = widget
-    self.camera = camera
-    self.wait_time_ms = wait_time_ms
-
-  def execute(self, steps_list, callback=None):
-    if not steps_list:
-      if callback:
-        callback()
-      return
-    try:
-      step = steps_list.pop(0)
-      logging.info(f"Steps Remaining: {len(steps_list)}")
-      self.camera.move_absolute(*step)
-      logging.info("Status: %s", self.camera.get_status())
-    except Exception as e:
-      logging.error("Error during move: %s", e)
-      if callback:
-        callback()
-      return
-    self.widget.after(self.wait_time_ms,
-                      lambda: self.execute(steps_list, callback))
 
 
 class BaseMoveDialog(tk.Toplevel):
@@ -275,14 +148,14 @@ class AbsoluteMoveDialog(BaseMoveDialog):
   """
 
   def __init__(self, master, camera, title="Absolute Move"):
-    fields = {"elevation": 0, "azimuth": 0, "zoom": 0}
-    field_types = {"elevation": float, "azimuth": float, "zoom": float}
+    fields = {"pan": 0, "tilt": 0, "zoom": 0}
+    field_types = {"pan": float, "tilt": float, "zoom": float}
     super().__init__(master, camera, fields, field_types, self.move_absolute,
                      title)
 
-  def move_absolute(self, elevation, azimuth, zoom):
+  def move_absolute(self, pan, tilt, zoom):
     try:
-      self.camera.move_absolute(elevation, azimuth, zoom)
+      self.camera.move_absolute(pan, tilt, zoom)
       logging.info("Status: %s", self.camera.get_status())
     except Exception as e:
       logging.error("Error during absolute move: %s", e)
@@ -295,15 +168,15 @@ class SteppedAbsoluteMoveDialog(BaseMoveDialog):
 
   def __init__(self, master, camera, title="Stepped Absolute Move"):
     fields = {
-        "elevation": 0,
-        "azimuth": 0,
+        "pan": 0,
+        "tilt": 0,
         "zoom": 0,
         "steps": 20,
         "wait_time_ms": 1500
     }
     field_types = {
-        "elevation": float,
-        "azimuth": float,
+        "pan": float,
+        "tilt": float,
         "zoom": float,
         "steps": int,
         "wait_time_ms": int
@@ -317,19 +190,13 @@ class SteppedAbsoluteMoveDialog(BaseMoveDialog):
       return
     self.move_absolute_steps(**values)
 
-  def move_absolute_steps(self, elevation, azimuth, zoom, steps, wait_time_ms):
-    try:
-      current_status = self.camera.get_status()
-    except Exception as e:
-      logging.error("Error retrieving camera status: %s", e)
-      return
+  def move_absolute_steps(self, pan, tilt, zoom, steps, wait_time_ms):
+    start_pose = cpg.PTZCameraPose().load_from_dict(self.camera.get_status())
+    end_pose = cpg.PTZCameraPose(pan, tilt, zoom)
+    stepped_move = cpg.SteppedMove(start_pose, end_pose, steps)
 
-    elev_steps = np.linspace(current_status["elevation"], elevation, steps)
-    azim_steps = np.linspace(current_status["azimuth"], azimuth, steps)
-    zoom_steps = np.linspace(current_status["zoom"], zoom, steps)
-    steps_list = list(zip(elev_steps, azim_steps, zoom_steps))
-    executor = SteppedMover(self, self.camera, wait_time_ms)
-    executor.execute(steps_list, callback=self.destroy)
+    step_mover = cpg.SteppedMover(self, self.camera, wait_time_ms)
+    step_mover.execute(stepped_move, callback=self.destroy)
 
 
 class AbsoluteMoveSequenceDialog(tk.Toplevel):
@@ -403,31 +270,14 @@ class AbsoluteMoveSequenceDialog(tk.Toplevel):
     self.run_sequence(sequence, self.execute_next_sequence)
 
   def run_sequence(self, sequence, callback):
-    try:
-      start = sequence["start_position"]
-      end = sequence["end_position"]
-      steps = sequence["nr_steps"]
-      wait_time_ms = sequence["wait_time_ms"]
-    except KeyError as e:
-      logging.error("Missing key in sequence: %s", e)
-      callback()
-      return
-    try:
-      start_zoom = start.get("absoluteZoom", start.get("zoom", 0))
-      self.camera.move_absolute(start["elevation"], start["azimuth"],
-                                start_zoom)
-    except Exception as e:
-      logging.error("Error moving to start position: %s", e)
-      callback()
-      return
-    elev_steps = np.linspace(start["elevation"], end["elevation"], steps)
-    azim_steps = np.linspace(start["azimuth"], end["azimuth"], steps)
-    zoom_steps = np.linspace(start.get("absoluteZoom", start.get("zoom", 0)),
-                             end.get("absoluteZoom", end.get("zoom", 0)),
-                             steps)
-    steps_list = list(zip(elev_steps, azim_steps, zoom_steps))
-    executor = SteppedMover(self, self.camera, wait_time_ms)
-    executor.execute(steps_list, callback=callback)
+    start_pose = cpg.PTZCameraPose().load_from_dict(sequence.get("start_pose"))
+    end_pose = cpg.PTZCameraPose().load_from_dict(sequence.get("end_pose"))
+    stepped_move = cpg.SteppedMove(start_pose, end_pose,
+                                   sequence.get("nr_steps"))
+
+    step_mover = cpg.SteppedMover(self, self.camera,
+                                  sequence.get("wait_time_ms"))
+    step_mover.execute(stepped_move, callback=callback)
 
 
 def main():
