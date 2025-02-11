@@ -37,6 +37,7 @@ ALARM_TRIGGERS = {
     17: 0.1,  #: 0.5 Horse
     18: 0.1,  #: 0.5 Sheep
     19: 0.1,  #: 0.5 Cow
+    20: 0.1,  #: 0.5 Zebra
 }
 ALARM_COLORS = {
     class_id: color
