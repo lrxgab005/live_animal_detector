@@ -5,6 +5,7 @@ import json
 import os
 import logging
 from functools import partial
+import math
 
 import config
 import camera_pose_gen as cpg
@@ -180,16 +181,18 @@ class PTZControllerUI:
     self.t_zoom_ms: int = 500
     self.continuous_interval_ms: int = 1000
 
+    # Bounding box to camera pose converter
+    self.bbox_pose_converter = dt.BBoxCameraPoseConverter(
+        config.IMG_WIDTH, config.IMG_HEIGHT, config.FX_SCALE, config.FY_SCALE)
+
     # Start DetectionPositionMatcher in a separate thread
-    self.detection_position_matcher_thread = threading.Thread(
-        target=lambda: setattr(
-            self, 'detection_position_matcher',
-            dt.DetectionPositionMatcher(self.camera, config.FRAME_DATA_PORT,
-                                        config.MIN_DETECTION_POSE_DT_MS, config
-                                        .FRAME_TO_POSE_LATENCY_MS, config.
-                                        CAM_DETECTIONS_PATH)),
-        daemon=True)
-    self.detection_position_matcher_thread.start()
+    self.detection_position_matcher = dt.DetectionPositionMatcher(
+        self.camera, config.FRAME_DATA_PORT, config.MIN_DETECTION_POSE_DT_MS,
+        config.FRAME_TO_POSE_LATENCY_MS, config.CAM_DETECTIONS_PATH,
+        self.bbox_pose_converter)
+    threading.Thread(target=lambda: setattr(self, 'detection_position_matcher',
+                                            self.detection_position_matcher),
+                     daemon=True).start()
 
   def move_timed(self, pan: float, tilt: float, zoom: float,
                  duration: int) -> None:
@@ -243,15 +246,12 @@ class PTZControllerUI:
 
   def show_track_move_dialog(self, seq_folder_path: str) -> None:
     """Show the track move sequence dialog."""
-    TrackMoveSequenceDialog(self.root, self.camera, seq_folder_path)
+    TrackMoveSequenceDialog(self.root, self.camera, seq_folder_path,
+                            self.detection_position_matcher)
 
   def show_click_drag_dialog(self) -> None:
     """Show the click drag dialog."""
-    bbox_pose_converter = dt.BBoxCameraPoseConverter(config.IMG_WIDTH,
-                                                     config.IMG_HEIGHT,
-                                                     config.FX_SCALE,
-                                                     config.FY_SCALE)
-    BBoxMoveDialog(self.root, self.camera, bbox_pose_converter)
+    BBoxMoveDialog(self.root, self.camera, self.detection_position_matcher)
 
 
 class BaseMoveDialog(tk.Toplevel):
@@ -459,13 +459,14 @@ class AbsoluteMoveSequenceDialog(tk.Toplevel):
 class TrackMoveSequenceDialog(tk.Toplevel):
   """
     Dialog for selecting and executing a sequence of stepped absolute moves
-    from predefined JSON sequences.
+    from predefined JSON sequences, including a circular plot for pan-tilt values.
     """
 
   def __init__(self,
                master: tk.Tk,
                camera: PTZCamera,
                seq_folder_path: str,
+               detection_pose_matcher: 'dt.DetectionPositionMatcher',
                title: str = "Absolute Move Sequence") -> None:
     super().__init__(master)
     self.camera = camera
@@ -476,6 +477,9 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     self._load_sequences(seq_folder_path)
     self._build_ui()
     self.sequence_queue = []
+    self.detection_pose_matcher = detection_pose_matcher
+    # Start periodic plot updates
+    self.after(100, self.update_plot)
 
   def _load_sequences(self, seq_folder_path: str) -> None:
     files = glob.glob(os.path.join(seq_folder_path, "*.json"))
@@ -509,6 +513,57 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                                                               column=1,
                                                               padx=5,
                                                               pady=5)
+
+    # Add canvas for pan-tilt plot
+    self.canvas = tk.Canvas(self, width=400, height=400, bg='white')
+    self.canvas.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
+    # Draw circular boundary
+    center_x, center_y, radius = 200, 200, 190
+    self.canvas.create_oval(center_x - radius,
+                            center_y - radius,
+                            center_x + radius,
+                            center_y + radius,
+                            outline='black')
+
+  def plot_points(self):
+    """Plot pan-tilt points from detection data on the canvas."""
+    self.canvas.delete("points")  # Clear previous points
+    center_x, center_y = 200, 200
+    max_radius = 190
+
+    # Iterate through all detection data
+    for data in self.detection_pose_matcher.detection_pose_match_queue:
+      for pose, class_id in zip(data.get("poses", []),
+                                data.get("class_ids", [])):
+        pan = pose.get("pan", 0)
+        tilt = pose.get("tilt", 0)
+
+        # Adjust pan for negative tilt and convert to radians
+        pan_rad = math.radians(pan)
+
+        # Calculate radius and clamp to max_radius
+        radius = ((tilt + 90) / 180) * max_radius
+        radius = min(radius, max_radius)
+
+        # Convert to Cartesian coordinates
+        x = center_x + radius * math.cos(pan_rad)
+        y = center_y - radius * math.sin(pan_rad)  # Invert y-axis
+        # print(f"Pan: {pan}, Tilt: {tilt}, X: {x}, Y: {y}")
+
+        # Choose color based on tilt sign
+        color = 'blue' if tilt >= 0 else 'red'
+        self.canvas.create_oval(x - 2,
+                                y - 2,
+                                x + 2,
+                                y + 2,
+                                fill=color,
+                                outline=color,
+                                tags="points")
+
+  def update_plot(self):
+    """Periodically update the plot with new data."""
+    self.plot_points()
+    self.after(100, self.update_plot)
 
   def on_run(self) -> None:
     file_key = self.sequence_var.get()
