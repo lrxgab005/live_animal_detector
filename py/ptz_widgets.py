@@ -9,6 +9,8 @@ from functools import partial
 import config
 import camera_pose_gen as cpg
 from ptz_network_lib import PTZCamera
+import threading
+import detection_tracking as dt
 
 # Configure logging
 logging.basicConfig(level=logging.INFO,
@@ -142,6 +144,17 @@ def start_ptz_controller(camera_config=None) -> None:
                                    config.CAM_MOVE_SEQS_PATH))
   btn_abs_move_seq.grid(row=5, column=4, columnspan=2, padx=5, pady=10)
 
+  btn_track_move_seq = tk.Button(
+      btn_frame,
+      text="Track Sequence",
+      command=lambda: ctrl.show_track_move_dialog(config.CAM_MOVE_SEQS_PATH))
+  btn_track_move_seq.grid(row=6, column=0, columnspan=6, padx=5, pady=10)
+
+  btn_click_drag = tk.Button(btn_frame,
+                             text="Click and Drag",
+                             command=lambda: ctrl.show_click_drag_dialog())
+  btn_click_drag.grid(row=7, column=0, columnspan=6, padx=5, pady=10)
+
   root.mainloop()
 
 
@@ -166,6 +179,17 @@ class PTZControllerUI:
     self.t_tilt_ms: int = 500
     self.t_zoom_ms: int = 500
     self.continuous_interval_ms: int = 1000
+
+    # Start DetectionPositionMatcher in a separate thread
+    self.detection_position_matcher_thread = threading.Thread(
+        target=lambda: setattr(
+            self, 'detection_position_matcher',
+            dt.DetectionPositionMatcher(self.camera, config.FRAME_DATA_PORT,
+                                        config.MIN_DETECTION_POSE_DT_MS, config
+                                        .FRAME_TO_POSE_LATENCY_MS, config.
+                                        CAM_DETECTIONS_PATH)),
+        daemon=True)
+    self.detection_position_matcher_thread.start()
 
   def move_timed(self, pan: float, tilt: float, zoom: float,
                  duration: int) -> None:
@@ -216,6 +240,18 @@ class PTZControllerUI:
   def show_move_sequence_dialog(self, seq_folder_path: str) -> None:
     """Show the absolute move sequence dialog."""
     AbsoluteMoveSequenceDialog(self.root, self.camera, seq_folder_path)
+
+  def show_track_move_dialog(self, seq_folder_path: str) -> None:
+    """Show the track move sequence dialog."""
+    TrackMoveSequenceDialog(self.root, self.camera, seq_folder_path)
+
+  def show_click_drag_dialog(self) -> None:
+    """Show the click drag dialog."""
+    bbox_pose_converter = dt.BBoxCameraPoseConverter(config.IMG_WIDTH,
+                                                     config.IMG_HEIGHT,
+                                                     config.FX_SCALE,
+                                                     config.FY_SCALE)
+    BBoxMoveDialog(self.root, self.camera, bbox_pose_converter)
 
 
 class BaseMoveDialog(tk.Toplevel):
@@ -418,3 +454,138 @@ class AbsoluteMoveSequenceDialog(tk.Toplevel):
 
     step_mover = cpg.SteppedMover(self, self.camera)
     step_mover.execute(seq_moves, callback=self.on_run)
+
+
+class TrackMoveSequenceDialog(tk.Toplevel):
+  """
+    Dialog for selecting and executing a sequence of stepped absolute moves
+    from predefined JSON sequences.
+    """
+
+  def __init__(self,
+               master: tk.Tk,
+               camera: PTZCamera,
+               seq_folder_path: str,
+               title: str = "Absolute Move Sequence") -> None:
+    super().__init__(master)
+    self.camera = camera
+    self.title(title)
+    self.grab_set()
+    self.sequences_dict = {}
+    self.seq_moves = cpg.SteppedMove()
+    self._load_sequences(seq_folder_path)
+    self._build_ui()
+    self.sequence_queue = []
+
+  def _load_sequences(self, seq_folder_path: str) -> None:
+    files = glob.glob(os.path.join(seq_folder_path, "*.json"))
+    for f in files:
+      try:
+        with open(f, "r") as fp:
+          sequences = json.load(fp)
+        basename = os.path.basename(f)
+        self.sequences_dict[basename] = sequences
+      except Exception as e:
+        logging.error(f"Error loading {f}: {e}")
+
+  def _build_ui(self) -> None:
+    tk.Label(self, text="Select Sequence File:").grid(row=0,
+                                                      column=0,
+                                                      padx=5,
+                                                      pady=5)
+    self.sequence_var = tk.StringVar(self)
+    options = list(self.sequences_dict.keys())
+    if options:
+      self.sequence_var.set(options[0])
+    tk.OptionMenu(self, self.sequence_var, *options).grid(row=0,
+                                                          column=1,
+                                                          padx=5,
+                                                          pady=5)
+    tk.Button(self, text="Run", command=self.on_run).grid(row=1,
+                                                          column=0,
+                                                          padx=5,
+                                                          pady=5)
+    tk.Button(self, text="Cancel", command=self.destroy).grid(row=1,
+                                                              column=1,
+                                                              padx=5,
+                                                              pady=5)
+
+  def on_run(self) -> None:
+    file_key = self.sequence_var.get()
+    if file_key not in self.sequences_dict:
+      logging.error("Selected file not found")
+      messagebox.showerror("Error", "Selected file not found")
+      return
+
+    seq_moves = cpg.SteppedMove()
+    for sequence in self.sequences_dict[file_key]:
+      start_pose = cpg.PTZCameraPose()
+      start_pose.load_from_dict(sequence.get("start_pose"))
+      end_pose = cpg.PTZCameraPose()
+      end_pose.load_from_dict(sequence.get("end_pose"))
+      seq_moves.add_linspaced_steps(start_pose, end_pose,
+                                    sequence.get("nr_steps"))
+
+    step_mover = cpg.SteppedMover(self, self.camera)
+    step_mover.execute(seq_moves, callback=self.on_run)
+
+
+class BBoxMoveDialog(tk.Toplevel):
+  """
+    Dialog with a canvas that lets users click and drag to select a bounding box;
+    the camera then moves to center on the selected region.
+  """
+
+  def __init__(self,
+               master: tk.Tk,
+               camera,
+               converter: 'dt.BBoxCameraPoseConverter',
+               title: str = "BBox Move") -> None:
+    super().__init__(master)
+    self.camera = camera
+    self.converter = converter
+    self.title(title)
+    self.canvas = tk.Canvas(self,
+                            width=self.converter.img_width,
+                            height=self.converter.img_height,
+                            bg="gray")
+    self.canvas.pack()
+    self.start_x = None
+    self.start_y = None
+    self.rect = None
+    self.raw_bbox = None
+    self.canvas.bind("<ButtonPress-1>", self.on_button_press)
+    self.canvas.bind("<B1-Motion>", self.on_move_press)
+    self.canvas.bind("<ButtonRelease-1>", self.on_button_release)
+
+  def on_button_press(self, event):
+    self.start_x = event.x
+    self.start_y = event.y
+    self.rect = self.canvas.create_rectangle(self.start_x,
+                                             self.start_y,
+                                             self.start_x,
+                                             self.start_y,
+                                             outline="red")
+
+  def on_move_press(self, event):
+    cur_x, cur_y = event.x, event.y
+    self.raw_bbox = [self.start_x, self.start_y, cur_x, cur_y]
+    self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
+
+  def on_button_release(self, event):
+    x0, y0, x1, y1 = self.raw_bbox
+    # x0, y0, x1, y1 = self.canvas.coords(self.rect)
+    bbox = [x0, y0, x1, y1]
+
+    try:
+      # Assume camera.get_status() returns a dict: {"pan": ..., "tilt": ..., "zoom": ...}
+      current_pose = self.camera.get_status()
+      new_params = self.converter.convert(bbox, current_pose)
+      self.camera.move_absolute(new_params["pan"], new_params["tilt"],
+                                new_params["zoom"])
+      logging.info(f"Moved camera to: {new_params}")
+    except Exception as e:
+      logging.error(f"Error moving camera: {e}")
+      messagebox.showerror("Error", f"Error moving camera: {e}")
+    self.canvas.delete(self.rect)
+    self.rect = None

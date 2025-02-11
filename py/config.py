@@ -6,6 +6,19 @@ HOST = "127.0.0.1"
 PORT = "5000"
 REMOTE_PLAYER_URL = f"http://{HOST}:{PORT}"
 
+# Frame Data UDP Settings
+FRAME_DATA_PORT = 4545
+
+# Frame detection settings
+MIN_DETECTION_POSE_DT_MS = 500
+FRAME_TO_POSE_LATENCY_MS = -900
+
+# Camera Intrinsics
+IMG_WIDTH = 1920
+IMG_HEIGHT = 1080
+FX_SCALE = 175
+FY_SCALE = 17
+
 # Alarm Settings
 ALARM_TRIGGERS = {
     0: 0.8,  # Human
@@ -33,6 +46,7 @@ SOUNDS_PATH = os.path.join(DATA_PATH, "sounds")
 IMGS_PATH = os.path.join(DATA_PATH, "images")
 CAM_CONFIG_PATH = os.path.join(DATA_PATH, "cam_configs")
 CAM_MOVE_SEQS_PATH = os.path.join(DATA_PATH, "cam_move_sequences")
+CAM_DETECTIONS_PATH = os.path.join(DATA_PATH, "detections")
 
 # Ensure paths are created if they don't exist
 os.makedirs(SOUNDS_PATH, exist_ok=True)
