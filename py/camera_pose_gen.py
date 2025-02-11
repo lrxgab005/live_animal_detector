@@ -96,12 +96,15 @@ class SteppedMover:
     self.camera = camera
 
   def execute(self, stepped_move, callback=None):
+    if self.widget.break_sequence:
+      self.widget.break_sequence = False
+      return
+
     if not stepped_move.has_steps():
       if callback:
         callback()
       return
 
-    print(str(stepped_move))
     next_pose = stepped_move.pop_step()
 
     try:

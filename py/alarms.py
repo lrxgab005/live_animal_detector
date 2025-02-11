@@ -32,14 +32,17 @@ class Alarm:
 
   def __call__(self, detection_frame):
     alarm_detetions = dt.DetectionFrame(detection_frame.image_frame)
+    alarm = False
     for bbox, class_id, score in zip(detection_frame.bboxes,
                                      detection_frame.class_ids,
                                      detection_frame.scores):
 
       if self.check_alarm(class_id, score):
         alarm_detetions.add_detection(bbox, class_id, score)
+        if self.alarm_cool_down_s > time.time() - self.last_alarm_s:
+          alarm = True
 
-    if alarm_detetions.has_detections:
+    if alarm:
       self.last_alarm_s = time.time()
       pygame.mixer.Sound(self.notificaion_sound_file_path).play()
       logging.info(f"Playing alarm sound: {self.alarm_sound_file_name}")
@@ -51,8 +54,6 @@ class Alarm:
     if class_id not in self.alarm_triggers:
       return False
     if score < self.alarm_triggers[class_id]:
-      return False
-    if self.alarm_cool_down_s > time.time() - self.last_alarm_s:
       return False
 
     logging.info(f"Found a {self.class_id_names[class_id]}!")

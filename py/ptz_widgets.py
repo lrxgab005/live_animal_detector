@@ -460,7 +460,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
   """
     Dialog for selecting and executing a sequence of stepped absolute moves
     from predefined JSON sequences, including a circular plot for pan-tilt values.
-    """
+  """
 
   def __init__(self,
                master: tk.Tk,
@@ -479,11 +479,10 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     self.detection_pose_matcher = detection_pose_matcher
     # Start periodic plot updates
     self.after(100, self.update_plot)
-
     self.canvas_width, self.canvas_height = 400, 400
     self.center_x, self.center_y, self.radius = 200, 200, 190
-
     self._build_ui()
+    self.break_sequence = False
 
   def _load_sequences(self, seq_folder_path: str) -> None:
     files = glob.glob(os.path.join(seq_folder_path, "*.json"))
@@ -517,67 +516,48 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                                                               column=1,
                                                               padx=5,
                                                               pady=5)
-
-    # Add canvas for pan-tilt plot
+    # Canvas for pan-tilt plot with click-to-move functionality
     self.canvas = tk.Canvas(self,
                             width=self.canvas_width,
                             height=self.canvas_height,
                             bg='white')
     self.canvas.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
-
+    self.canvas.bind("<Button-1>", self.on_canvas_click)
     # Draw circular boundary
     self.canvas.create_oval(self.center_x - self.radius,
                             self.center_y - self.radius,
                             self.center_x + self.radius,
                             self.center_y + self.radius,
                             outline='black')
-
     # Add degree markings
-    for angle in range(0, 360, 90):  # Every 90 degrees
+    for angle in range(0, 360, 90):
       rad = math.radians(angle)
       x_outer = self.center_x + self.radius * math.cos(rad)
-      y_outer = self.center_y - self.radius * math.sin(rad)  # Invert y-axis
+      y_outer = self.center_y - self.radius * math.sin(rad)
       x_inner = self.center_x + (self.radius - 10) * math.cos(rad)
       y_inner = self.center_y - (self.radius - 10) * math.sin(rad)
-
-      # Draw tick marks
       self.canvas.create_line(x_inner, y_inner, x_outer, y_outer, fill="black")
-
-      # Draw labels slightly outside the circle
       x_label = self.center_x + (self.radius - 20) * math.cos(rad)
       y_label = self.center_y - (self.radius - 20) * math.sin(rad)
-      print(f"Angle: {angle}, X: {x_label}, Y: {y_label}")
       self.canvas.create_text(x_label,
                               y_label,
                               text=str(angle),
                               font=("Arial", 10),
                               fill="black")
 
+  def on_canvas_click(self, event: tk.Event) -> None:
+    # Move camera to pan/tilt corresponding to clicked position
+    self.break_sequence = True
+    pan, tilt = self.cartesian_to_pose(event.x, event.y)
+    pose = cpg.PTZCameraPose()
+    pose.pan = pan
+    pose.tilt = tilt
+    pose.zoom = self.detection_pose_matcher.curr_pose["zoom"]
+    self.camera.move_absolute(pose.pan, pose.tilt, pose.zoom)
+
   def plot_points(self):
-    """Plot pan-tilt points from detection data on the canvas."""
-    self.canvas.delete("points")  # Clear previous points
+    self.canvas.delete("points")
 
-    # Iterate through all detection data
-    for data in self.detection_pose_matcher.detection_pose_match_queue:
-      for pose, class_id in zip(data.get("poses", []),
-                                data.get("class_ids", [])):
-        pan = pose.get("pan", 0)
-        tilt = pose.get("tilt", 0)
-
-        x, y = self.pose_to_cartesian(pan, tilt)
-
-        # Choose color based on tilt sign
-        color = config.ALARM_COLORS.get(class_id, [0, 0, 0])
-        color = f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
-        self.canvas.create_oval(x - 2,
-                                y - 2,
-                                x + 2,
-                                y + 2,
-                                fill=color,
-                                outline=color,
-                                tags="points")
-
-    # draw yellow cross at current camera pose
     cam_pose = self.detection_pose_matcher.curr_pose
     x, y = self.pose_to_cartesian(cam_pose["pan"], cam_pose["tilt"])
     self.canvas.create_oval(x - 5,
@@ -588,22 +568,46 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                             outline="black",
                             tags="points")
 
+    if not self.detection_pose_matcher.detection_pose_match_queue:
+      return
+
+    match_data = self.detection_pose_matcher.detection_pose_match_queue.copy()
+    for data in match_data:
+      for pose, class_id in zip(data.get("poses", []),
+                                data.get("class_ids", [])):
+        pan = pose.get("pan", 0)
+        tilt = pose.get("tilt", 0)
+        x, y = self.pose_to_cartesian(pan, tilt)
+        color = config.ALARM_COLORS.get(class_id, [0, 0, 0])
+        color = f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
+        self.canvas.create_oval(x - 2,
+                                y - 2,
+                                x + 2,
+                                y + 2,
+                                fill=color,
+                                outline=color,
+                                tags="points")
+
+  def cartesian_to_pose(self, x: float, y: float) -> tuple:
+    dx = x - self.center_x
+    dy = self.center_y - y  # Invert y-axis
+    radius_click = math.sqrt(dx * dx + dy * dy)
+    clamped_radius = min(radius_click, self.radius)
+    pan = math.degrees(math.atan2(dy, dx))
+    if pan < 0:
+      pan += 360
+    tilt = -((clamped_radius / self.radius) * 180 - 90)
+    return pan, tilt
+
   def pose_to_cartesian(self, pan: float, tilt: float) -> tuple:
-    """Convert pan-tilt angles to Cartesian coordinates."""
-    # Adjust pan for negative tilt and convert to radians
     pan_rad = math.radians(pan)
-
-    # Calculate radius and clamp to max_radius
-    radius = ((tilt + 90) / 180) * self.radius
+    radius = ((-tilt + 90) / 180) * self.radius
     radius = min(radius, self.radius)
-
-    # Convert to Cartesian coordinates
     x = self.center_x + radius * math.cos(pan_rad)
-    y = self.center_y - radius * math.sin(pan_rad)  # Invert y-axis
+    y = self.center_y - radius * math.sin(pan_rad)
     return x, y
 
   def update_plot(self):
-    """Periodically update the plot with new data."""
     self.plot_points()
     self.after(100, self.update_plot)
 
@@ -613,7 +617,6 @@ class TrackMoveSequenceDialog(tk.Toplevel):
       logging.error("Selected file not found")
       messagebox.showerror("Error", "Selected file not found")
       return
-
     seq_moves = cpg.SteppedMove()
     for sequence in self.sequences_dict[file_key]:
       start_pose = cpg.PTZCameraPose()
@@ -622,7 +625,6 @@ class TrackMoveSequenceDialog(tk.Toplevel):
       end_pose.load_from_dict(sequence.get("end_pose"))
       seq_moves.add_linspaced_steps(start_pose, end_pose,
                                     sequence.get("nr_steps"))
-
     step_mover = cpg.SteppedMover(self, self.camera)
     step_mover.execute(seq_moves, callback=self.on_run)
 
