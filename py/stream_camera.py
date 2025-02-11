@@ -10,6 +10,7 @@ import os
 import datetime
 import viz
 import alarms
+import network
 
 
 class CameraStreamer:
@@ -141,6 +142,8 @@ def main():
     stats.update(latency)
 
     detection_frame = detector.detect(frame, frame_ts)
+    if detection_frame.has_detections:
+      network.send(config.FRAME_DATA_PORT, detection_frame.to_dict())
     detection_frame.apply_min_confidence_filter(config.YOLO_MIN_CONFIDENCE)
     detection_frame.apply_class_filter(config.YOLO_CLASS_IDS)
 
