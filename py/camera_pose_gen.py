@@ -96,7 +96,7 @@ class SteppedMover:
     self.camera = camera
 
   def execute(self, stepped_move, callback=None):
-    if self.widget.break_sequence:
+    if hasattr(self.widget, "break_sequence") and self.widget.break_sequence:
       self.widget.break_sequence = False
       return
 
