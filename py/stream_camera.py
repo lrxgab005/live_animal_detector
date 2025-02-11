@@ -142,13 +142,13 @@ def main():
     stats.update(latency)
 
     detection_frame = detector.detect(frame, frame_ts)
-    if detection_frame.has_detections:
-      network.send(config.FRAME_DATA_PORT, detection_frame.to_dict())
     detection_frame.apply_min_confidence_filter(config.YOLO_MIN_CONFIDENCE)
     detection_frame.apply_class_filter(config.YOLO_CLASS_IDS)
 
     drawer.draw_detections(detection_frame)
     alarm_detections = alarm(detection_frame)
+    if alarm_detections.has_detections:
+      network.send(config.FRAME_DATA_PORT, detection_frame.to_dict())
     drawer.draw_detections(alarm_detections, bold=True)
 
     if alarm_detections.has_detections:

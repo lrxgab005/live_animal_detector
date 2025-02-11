@@ -1,5 +1,14 @@
 import os
 import json
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def generate_colors(nr_colors):
+  cmap = plt.get_cmap('nipy_spectral')
+  indices = np.linspace(0, 1, nr_colors)
+  return (np.array([cmap(i)[:3] for i in indices]) * 255).astype("uint8")
+
 
 # Audio Server Settings
 HOST = "127.0.0.1"
@@ -21,13 +30,18 @@ FY_SCALE = 17
 
 # Alarm Settings
 ALARM_TRIGGERS = {
-    0: 0.8,  # Human
-    2: 0.8,  # Car
-    14: 0.7,  # Bird
-    16: 0.7,  # Dog
-    17: 0.5,  # Horse
-    18: 0.5,  # Sheep
-    19: 0.5,  # Cow
+    0: 0.1,  #: 0.8 Human
+    2: 0.1,  #: 0.8 Car
+    14: 0.1,  #: 0.7 Bird
+    16: 0.1,  #: 0.7 Dog
+    17: 0.1,  #: 0.5 Horse
+    18: 0.1,  #: 0.5 Sheep
+    19: 0.1,  #: 0.5 Cow
+}
+ALARM_COLORS = {
+    class_id: color
+    for class_id, color in zip(ALARM_TRIGGERS.keys(),
+                               generate_colors(len(ALARM_TRIGGERS)))
 }
 NOTIFICATION_SOUND_FILE_NAME = "notification_00.mp3"
 ALARM_SOUND_FILE_NAME = "notification_00.mp3"

@@ -56,9 +56,14 @@ class DetectionPositionMatcher:
     Matches detection frames with corresponding PTZ camera poses.
   """
 
-  def __init__(self, camera: PTZCamera, frame_data_port: int, min_dt_ms: int,
-               frame_to_pose_latency_ms: int, detection_pose_folder_path: str,
-               bbox_to_pose_converter: BBoxCameraPoseConverter) -> None:
+  def __init__(self,
+               camera: PTZCamera,
+               frame_data_port: int,
+               min_dt_ms: int,
+               frame_to_pose_latency_ms: int,
+               detection_pose_folder_path: str,
+               bbox_to_pose_converter: BBoxCameraPoseConverter,
+               write_detections: bool = False) -> None:
     # Convert milliseconds to seconds for internal consistency.
     self.min_dt = min_dt_ms / 1000.0
     self.frame_to_pose_latency = frame_to_pose_latency_ms / 1000.0
@@ -69,10 +74,12 @@ class DetectionPositionMatcher:
 
     self.camera = camera
     self.bbox_to_pose_converter = bbox_to_pose_converter
+    self.write_detections = write_detections
 
     self.sock = network.create_udp_socket(frame_data_port, '127.0.0.1')
     self.cam_detection_data_queue = collections.deque(maxlen=1000)
     self.cam_pose_queue = collections.deque(maxlen=1000)
+    self.curr_pose = None
     self.detection_pose_match_queue = collections.deque(maxlen=100)
 
     threading.Thread(target=self.collect_detection_data, daemon=True).start()
@@ -97,6 +104,7 @@ class DetectionPositionMatcher:
         time.sleep(0.1)
         continue
       pose["timestamp"] = time.time()
+      self.curr_pose = pose
       self.cam_pose_queue.append(pose)
 
   def match_detection_and_pose(self) -> None:
@@ -118,10 +126,12 @@ class DetectionPositionMatcher:
         pose = self.cam_pose_queue.popleft()
         self.add_poses_to_detections(detections, pose)
         self.detection_pose_match_queue.append(detections)
-        logging.info(f"Nr of matches: {len(self.detection_pose_match_queue)}, "
-                     f"buffer sizes: {len(self.cam_detection_data_queue)}, "
-                     f"{len(self.cam_pose_queue)}")
-        # self.write_detection_pose_pairs()
+        logging.debug(
+            f"Nr of matches: {len(self.detection_pose_match_queue)}, "
+            f"buffer sizes: {len(self.cam_detection_data_queue)}, "
+            f"{len(self.cam_pose_queue)}")
+        if self.write_detections:
+          self.write_detection_pose_pairs()
       elif dt < -self.min_dt:
         self.cam_pose_queue.popleft()
       else:
