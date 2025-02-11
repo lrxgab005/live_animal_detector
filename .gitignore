@@ -3,3 +3,4 @@ __pycache__
 *.pt
 data/images/*
 data/cam_configs/*
+data/detections/*
