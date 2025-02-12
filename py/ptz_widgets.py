@@ -252,7 +252,7 @@ class PTZControllerUI:
 
   def show_click_drag_dialog(self) -> None:
     """Show the click drag dialog."""
-    BBoxMoveDialog(self.root, self.camera, self.detection_position_matcher)
+    BBoxMoveDialog(self.root, self.camera, self.bbox_pose_converter)
 
 
 class BaseMoveDialog(tk.Toplevel):
