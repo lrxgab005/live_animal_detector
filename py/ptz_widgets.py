@@ -470,6 +470,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                detection_pose_matcher: 'dt.DetectionPositionMatcher',
                class_id_to_color: dict,
                class_id_to_name: dict,
+               zoom_step: int = 10,
                title: str = "2D Detection Plot") -> None:
     super().__init__(master)
     self.camera = camera
@@ -480,7 +481,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     self._load_sequences(seq_folder_path)
     self.sequence_queue = []
     self.detection_pose_matcher = detection_pose_matcher
-    # Start periodic plot updates (O(1) per call)
+    self.zoom_step = zoom_step
     self.after(100, self.update_plot)
 
     # UI parameters
@@ -527,10 +528,10 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                                                           column=0,
                                                           padx=5,
                                                           pady=5)
-    tk.Button(self, text="Cancel", command=self.destroy).grid(row=1,
-                                                              column=1,
-                                                              padx=5,
-                                                              pady=5)
+    tk.Button(self, text="Cancel", command=self.stop_sequence).grid(row=1,
+                                                                    column=1,
+                                                                    padx=5,
+                                                                    pady=5)
     # Canvas for pan-tilt plot with click-to-move functionality
     self.canvas = tk.Canvas(self,
                             width=self.canvas_width,
@@ -581,15 +582,51 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                               font=("Arial", 10),
                               fill="black")
 
+    # Zoom control UI: display current zoom and add + and - buttons
+    zoom_frame = tk.Frame(self)
+    zoom_frame.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+    self.zoom_label = tk.Label(zoom_frame, text=f"Zoom: {0}")
+    self.update_zoom_label()
+    self.zoom_label.grid(row=0, column=0, padx=5)
+    tk.Button(zoom_frame, text="-", command=self.decrease_zoom).grid(row=0,
+                                                                     column=1,
+                                                                     padx=5)
+    tk.Button(zoom_frame, text="+", command=self.increase_zoom).grid(row=0,
+                                                                     column=2,
+                                                                     padx=5)
+
+  def stop_sequence(self) -> None:
+    self.break_sequence = True
+
   def on_canvas_click(self, event: tk.Event) -> None:
     # Move camera to pan/tilt corresponding to clicked position
-    self.break_sequence = True
+    self.stop_sequence()
     pan, tilt = self.cartesian_to_pose(event.x, event.y)
     pose = cpg.PTZCameraPose()
     pose.pan = pan
     pose.tilt = tilt
     pose.zoom = self.detection_pose_matcher.curr_pose.get("zoom", 0)
     self.camera.move_absolute(pose.pan, pose.tilt, pose.zoom)
+
+  def update_zoom_label(self) -> None:
+    zoom_value = self.detection_pose_matcher.curr_pose.get("zoom", 0)
+    self.zoom_label.config(text=f"Zoom: {zoom_value}")
+
+  def change_zoom(self, delta_zoom: int) -> None:
+    pose = self.detection_pose_matcher.curr_pose
+    if "zoom" not in pose:
+      logging.error(f"Current pose does not have zoom value: {pose}")
+      return
+    pose["zoom"] += delta_zoom
+    self.camera.move_absolute(pose.get("pan", 0), pose.get("tilt", 0),
+                              pose.get("zoom", 0))
+    self.zoom_label.config(text=f'Zoom: {pose["zoom"]}')
+
+  def increase_zoom(self) -> None:
+    self.change_zoom(self.zoom_step)
+
+  def decrease_zoom(self) -> None:
+    self.change_zoom(-self.zoom_step)
 
   def plot_points(self):
     self.canvas.delete("points")
@@ -644,6 +681,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     return x, y
 
   def update_plot(self):
+    self.update_zoom_label()
     self.plot_points()
     self.after(100, self.update_plot)
 
