@@ -130,13 +130,15 @@ def main():
       logging.debug("Frame Queue Empty")
       time.sleep(0.1)
 
-    frame, frame_ts = frame_queue.get(timeout=10)
+    frame_data = frame_queue.get(timeout=10)
     while not frame_queue.empty() and not args.video_file:
-      frame, frame_ts = frame_queue.get_nowait(
-      )  # Drop old queue frames if real-time
+      frame_data = frame_queue.get(
+          timeout=10)  # Drop old queue frames if real-time
 
-    if frame is None:
-      break
+    if frame_data is None:
+      continue
+
+    frame, frame_ts = frame_data
 
     latency = (time.time() - start_time) * 1000.0
     stats.update(latency)
