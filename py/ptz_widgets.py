@@ -580,9 +580,9 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     # Zoom control UI: display current zoom and add + and - buttons
     zoom_frame = tk.Frame(self)
     zoom_frame.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
-    self.zoom_label = tk.Label(zoom_frame, text=f"Zoom: {0}")
-    self.update_zoom_label()
-    self.zoom_label.grid(row=0, column=0, padx=5)
+    self.pose_label = tk.Label(zoom_frame, text=f"Zoom: {0}")
+    self.update_pose_label()
+    self.pose_label.grid(row=0, column=0, padx=5)
     tk.Button(zoom_frame, text="-", command=self.decrease_zoom).grid(row=0,
                                                                      column=1,
                                                                      padx=5)
@@ -603,9 +603,15 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     pose.zoom = self.detection_pose_matcher.curr_pose.get("zoom", 0)
     self.camera.move_absolute(pose.pan, pose.tilt, pose.zoom)
 
-  def update_zoom_label(self) -> None:
-    zoom_value = self.detection_pose_matcher.curr_pose.get("zoom", 0)
-    self.zoom_label.config(text=f"Zoom: {zoom_value}")
+  def update_pose_label(self) -> None:
+    pitch_value = int(self.detection_pose_matcher.curr_pose.get("pan", 0))
+    tilt_value = int(self.detection_pose_matcher.curr_pose.get("tilt", 0))
+    zoom_value = int(self.detection_pose_matcher.curr_pose.get("zoom", 0))
+    nr_detections = len(self.detection_pose_matcher.detection_pose_match_queue)
+
+    self.pose_label.config(
+        text=(f"Nr Detections: {nr_detections}       "
+              f"Pitch: {pitch_value}, Tilt: {tilt_value}, Zoom: {zoom_value}"))
 
   def change_zoom(self, delta_zoom: int) -> None:
     pose = self.detection_pose_matcher.curr_pose
@@ -615,7 +621,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     pose["zoom"] += delta_zoom
     self.camera.move_absolute(pose.get("pan", 0), pose.get("tilt", 0),
                               pose.get("zoom", 0))
-    self.zoom_label.config(text=f'Zoom: {pose["zoom"]}')
+    self.pose_label.config(text=f'Zoom: {pose["zoom"]}')
 
   def increase_zoom(self) -> None:
     self.change_zoom(self.zoom_step)
@@ -676,7 +682,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     return x, y
 
   def update_plot(self):
-    self.update_zoom_label()
+    self.update_pose_label()
     self.plot_points()
     self.after(100, self.update_plot)
 
