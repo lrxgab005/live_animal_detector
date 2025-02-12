@@ -79,7 +79,7 @@ class DetectionPositionMatcher:
     self.sock = network.create_udp_socket(frame_data_port, '127.0.0.1')
     self.cam_detection_data_queue = collections.deque(maxlen=1000)
     self.cam_pose_queue = collections.deque(maxlen=1000)
-    self.curr_pose = None
+    self.curr_pose = {}
     self.detection_pose_match_queue = collections.deque(maxlen=100)
 
     threading.Thread(target=self.collect_detection_data, daemon=True).start()

@@ -30,14 +30,24 @@ FY_SCALE = 17
 
 # Alarm Settings
 ALARM_TRIGGERS = {
-    0: 0.1,  #: 0.8 Human
-    2: 0.1,  #: 0.8 Car
-    14: 0.1,  #: 0.7 Bird
-    16: 0.1,  #: 0.7 Dog
-    17: 0.1,  #: 0.5 Horse
-    18: 0.1,  #: 0.5 Sheep
-    19: 0.1,  #: 0.5 Cow
-    20: 0.1,  #: 0.5 Zebra
+    0: 0.8,
+    2: 0.8,
+    14: 0.7,
+    16: 0.7,
+    17: 0.5,
+    18: 0.5,
+    19: 0.5,
+    20: 0.5,
+}
+ALARM_NAMES = {
+    0: "Human",
+    2: "Car",
+    14: "Bird",
+    16: "Dog",
+    17: "Horse",
+    18: "Sheep",
+    19: "Cow",
+    20: "Zebra",
 }
 ALARM_COLORS = {
     class_id: color

@@ -147,7 +147,7 @@ def start_ptz_controller(camera_config=None) -> None:
 
   btn_track_move_seq = tk.Button(
       btn_frame,
-      text="Track Sequence",
+      text="Interactive Detection Plot",
       command=lambda: ctrl.show_track_move_dialog(config.CAM_MOVE_SEQS_PATH))
   btn_track_move_seq.grid(row=6, column=0, columnspan=6, padx=5, pady=10)
 
@@ -247,7 +247,8 @@ class PTZControllerUI:
   def show_track_move_dialog(self, seq_folder_path: str) -> None:
     """Show the track move sequence dialog."""
     TrackMoveSequenceDialog(self.root, self.camera, seq_folder_path,
-                            self.detection_position_matcher)
+                            self.detection_position_matcher,
+                            config.ALARM_COLORS, config.ALARM_NAMES)
 
   def show_click_drag_dialog(self) -> None:
     """Show the click drag dialog."""
@@ -467,7 +468,9 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                camera: PTZCamera,
                seq_folder_path: str,
                detection_pose_matcher: 'dt.DetectionPositionMatcher',
-               title: str = "Absolute Move Sequence") -> None:
+               class_id_to_color: dict,
+               class_id_to_name: dict,
+               title: str = "2D Detection Plot") -> None:
     super().__init__(master)
     self.camera = camera
     self.title(title)
@@ -477,10 +480,22 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     self._load_sequences(seq_folder_path)
     self.sequence_queue = []
     self.detection_pose_matcher = detection_pose_matcher
-    # Start periodic plot updates
+    # Start periodic plot updates (O(1) per call)
     self.after(100, self.update_plot)
-    self.canvas_width, self.canvas_height = 400, 400
-    self.center_x, self.center_y, self.radius = 200, 200, 190
+
+    # UI parameters
+    self.legend_width = 100
+    self.circle_area_width = 800
+    self.canvas_width = self.circle_area_width + self.legend_width
+    self.canvas_height = 800
+    self.center_x = self.circle_area_width / 2
+    self.center_y = self.canvas_height / 2
+    self.radius = self.center_y - 10
+    self.class_id_to_color = {
+        class_id: f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+        for class_id, rgb in class_id_to_color.items()
+    }
+    self.class_id_to_name = class_id_to_name
     self._build_ui()
     self.break_sequence = False
 
@@ -523,13 +538,13 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                             bg='white')
     self.canvas.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
     self.canvas.bind("<Button-1>", self.on_canvas_click)
-    # Draw circular boundary
+    # Draw circular boundary within the designated circle area
     self.canvas.create_oval(self.center_x - self.radius,
                             self.center_y - self.radius,
                             self.center_x + self.radius,
                             self.center_y + self.radius,
                             outline='black')
-    # Add degree markings
+    # Add degree markings at 0, 90, 180, 270 degrees
     for angle in range(0, 360, 90):
       rad = math.radians(angle)
       x_outer = self.center_x + self.radius * math.cos(rad)
@@ -545,6 +560,27 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                               font=("Arial", 10),
                               fill="black")
 
+    # Draw legend to the right of the circle based on class_id_to_color mapping
+    legend_start_x = self.circle_area_width + 10
+    legend_start_y = 20
+    box_size = 20
+    spacing = 10
+    for idx, (class_id,
+              color) in enumerate(sorted(self.class_id_to_color.items())):
+      y = legend_start_y + idx * (box_size + spacing)
+      self.canvas.create_rectangle(legend_start_x,
+                                   y,
+                                   legend_start_x + box_size,
+                                   y + box_size,
+                                   fill=color,
+                                   outline=color)
+      self.canvas.create_text(legend_start_x + box_size + 5,
+                              y + box_size / 2,
+                              text=self.class_id_to_name.get(class_id),
+                              anchor="w",
+                              font=("Arial", 10),
+                              fill="black")
+
   def on_canvas_click(self, event: tk.Event) -> None:
     # Move camera to pan/tilt corresponding to clicked position
     self.break_sequence = True
@@ -552,14 +588,15 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     pose = cpg.PTZCameraPose()
     pose.pan = pan
     pose.tilt = tilt
-    pose.zoom = self.detection_pose_matcher.curr_pose["zoom"]
+    pose.zoom = self.detection_pose_matcher.curr_pose.get("zoom", 0)
     self.camera.move_absolute(pose.pan, pose.tilt, pose.zoom)
 
   def plot_points(self):
     self.canvas.delete("points")
 
     cam_pose = self.detection_pose_matcher.curr_pose
-    x, y = self.pose_to_cartesian(cam_pose["pan"], cam_pose["tilt"])
+    x, y = self.pose_to_cartesian(cam_pose.get("pan", 0),
+                                  cam_pose.get("tilt", 0))
     self.canvas.create_oval(x - 5,
                             y - 5,
                             x + 5,
@@ -578,8 +615,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
         pan = pose.get("pan", 0)
         tilt = pose.get("tilt", 0)
         x, y = self.pose_to_cartesian(pan, tilt)
-        color = config.ALARM_COLORS.get(class_id, [0, 0, 0])
-        color = f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
+        color = self.class_id_to_color.get(class_id, 'black')
         self.canvas.create_oval(x - 2,
                                 y - 2,
                                 x + 2,
