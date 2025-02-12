@@ -524,14 +524,8 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                                                           column=1,
                                                           padx=5,
                                                           pady=5)
-    tk.Button(self, text="Run", command=self.on_run).grid(row=1,
-                                                          column=0,
-                                                          padx=5,
-                                                          pady=5)
-    tk.Button(self, text="Cancel", command=self.stop_sequence).grid(row=1,
-                                                                    column=1,
-                                                                    padx=5,
-                                                                    pady=5)
+    self.sequence_var.trace("w", lambda *args: self.on_run())
+
     # Canvas for pan-tilt plot with click-to-move functionality
     self.canvas = tk.Canvas(self,
                             width=self.canvas_width,
@@ -545,8 +539,9 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                             self.center_x + self.radius,
                             self.center_y + self.radius,
                             outline='black')
-    # Add degree markings at 0, 90, 180, 270 degrees
-    for angle in range(0, 360, 90):
+
+    # Add degree markings around the circle
+    for angle in range(0, 360, 30):
       rad = math.radians(angle)
       x_outer = self.center_x + self.radius * math.cos(rad)
       y_outer = self.center_y - self.radius * math.sin(rad)

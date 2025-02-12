@@ -52,8 +52,6 @@ class SteppedMove:
     if all([pose1, pose2, nr_steps]):
       self.add_linspaced_steps(pose1, pose2, nr_steps)
 
-    logging.info(f"Generated {nr_steps} steps")
-
   def add_linspaced_steps(self, pose1, pose2, nr_steps):
     pan_steps = np.linspace(pose1.pan, pose2.pan, nr_steps)
     tilt_steps = np.linspace(pose1.tilt, pose2.tilt, nr_steps)
@@ -67,6 +65,9 @@ class SteppedMove:
                           pan_steps, tilt_steps, zoom_steps, wait_times_ms)
     ]
     self.total_steps = len(self.steps)
+
+    logging.info(f"{str(pose1)}->{str(pose2)}")
+    logging.info(f"Generated {nr_steps} steps")
 
   def has_steps(self):
     return bool(self.steps)
@@ -97,6 +98,7 @@ class SteppedMover:
 
   def execute(self, stepped_move, callback=None):
     if hasattr(self.widget, "break_sequence") and self.widget.break_sequence:
+      logging.info("Breaking sequence")
       self.widget.break_sequence = False
       return
 
