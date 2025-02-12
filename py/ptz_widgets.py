@@ -544,12 +544,12 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     for angle in range(0, 360, 30):
       rad = math.radians(angle)
       x_outer = self.center_x + self.radius * math.cos(rad)
-      y_outer = self.center_y - self.radius * math.sin(rad)
+      y_outer = self.center_y + self.radius * math.sin(rad)
       x_inner = self.center_x + (self.radius - 10) * math.cos(rad)
-      y_inner = self.center_y - (self.radius - 10) * math.sin(rad)
+      y_inner = self.center_y + (self.radius - 10) * math.sin(rad)
       self.canvas.create_line(x_inner, y_inner, x_outer, y_outer, fill="black")
       x_label = self.center_x + (self.radius - 20) * math.cos(rad)
-      y_label = self.center_y - (self.radius - 20) * math.sin(rad)
+      y_label = self.center_y + (self.radius - 20) * math.sin(rad)
       self.canvas.create_text(x_label,
                               y_label,
                               text=str(angle),
@@ -667,7 +667,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     dy = self.center_y - y  # Invert y-axis
     radius_click = math.sqrt(dx * dx + dy * dy)
     clamped_radius = min(radius_click, self.radius)
-    pan = math.degrees(math.atan2(dy, dx))
+    pan = -math.degrees(math.atan2(dy, dx))
     if pan < 0:
       pan += 360
     tilt = -((clamped_radius / self.radius) * 180 - 90)
@@ -678,7 +678,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     radius = ((-tilt + 90) / 180) * self.radius
     radius = min(radius, self.radius)
     x = self.center_x + radius * math.cos(pan_rad)
-    y = self.center_y - radius * math.sin(pan_rad)
+    y = self.center_y + radius * math.sin(pan_rad)
     return x, y
 
   def update_plot(self):
