@@ -1,7 +1,7 @@
 [
   {
     "start_pose": {
-      "pan": 300,
+      "pan": 325,
       "tilt": 18,
       "zoom": 50,
       "wait_time_ms": 3000
@@ -16,8 +16,8 @@
   },
   {
     "start_pose": {
-      "pan": 300,
-      "tilt": 18,
+      "pan": 330,
+      "tilt": 30,
       "zoom": 147,
       "wait_time_ms": 3000
     },
@@ -39,6 +39,36 @@
     "end_pose": {
       "pan": 90,
       "tilt": 0,
+      "zoom": 147,
+      "wait_time_ms": 3000
+    },
+    "nr_steps": 20
+  },
+  {
+    "start_pose": {
+      "pan": 330,
+      "tilt": 15,
+      "zoom": 147,
+      "wait_time_ms": 3000
+    },
+    "end_pose": {
+      "pan": 200,
+      "tilt": -23,
+      "zoom": 147,
+      "wait_time_ms": 3000
+    },
+    "nr_steps": 20
+  },
+  {
+    "start_pose": {
+      "pan": 200,
+      "tilt": -23,
+      "zoom": 147,
+      "wait_time_ms": 3000
+    },
+    "end_pose": {
+      "pan": 90,
+      "tilt": -13,
       "zoom": 147,
       "wait_time_ms": 3000
     },
