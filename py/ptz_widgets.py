@@ -12,6 +12,7 @@ import camera_pose_gen as cpg
 from ptz_network_lib import PTZCamera
 import threading
 import detection_tracking as dt
+from PIL import Image, ImageTk
 
 # Configure logging
 logging.basicConfig(level=logging.INFO,
@@ -457,17 +458,148 @@ class AbsoluteMoveSequenceDialog(tk.Toplevel):
     step_mover.execute(seq_moves, callback=self.on_run)
 
 
+class PanTiltCanvas(tk.Canvas):
+  """
+    Custom canvas that converts between pan/tilt and canvas coords,
+    and draws a heatmap as a single image for performance.
+  """
+
+  def __init__(self,
+               master,
+               width: int,
+               height: int,
+               center_x: float,
+               center_y: float,
+               radius,
+               heat_radius_px: float = 10.0,
+               **kwargs):
+    super().__init__(master, width=width, height=height, bg='white', **kwargs)
+    self.center_x = center_x
+    self.center_y = center_y
+    self.radius = radius
+    self.heat_radius_px = heat_radius_px
+    self.heatmap_image = None
+    self.heatmap_photo = None
+    self.heatmap_obj_id = None
+
+    # Draw boundary circle
+    self.create_oval(self.center_x - self.radius,
+                     self.center_y - self.radius,
+                     self.center_x + self.radius,
+                     self.center_y + self.radius,
+                     outline='black')
+
+    # Draw angle markings
+    for angle in range(0, 360, 30):
+      rad = math.radians(angle)
+      x_outer = self.center_x + self.radius * math.cos(rad)
+      y_outer = self.center_y + self.radius * math.sin(rad)
+      x_inner = self.center_x + (self.radius - 10) * math.cos(rad)
+      y_inner = self.center_y + (self.radius - 10) * math.sin(rad)
+      self.create_line(x_inner, y_inner, x_outer, y_outer, fill="black")
+
+      x_label = self.center_x + (self.radius - 20) * math.cos(rad)
+      y_label = self.center_y + (self.radius - 20) * math.sin(rad)
+      self.create_text(x_label,
+                       y_label,
+                       text=str(angle),
+                       font=("Arial", 10),
+                       fill="black")
+
+  def to_canvas_coords(self, pan: float, tilt: float) -> tuple[float, float]:
+    pan_rad = math.radians(pan)
+    r = ((-tilt + 90) / 180) * self.radius
+    r = min(r, self.radius)
+    x = self.center_x + r * math.cos(pan_rad)
+    y = self.center_y + r * math.sin(pan_rad)
+    return x, y
+
+  def to_pan_tilt_coords(self, x: float, y: float) -> tuple[float, float]:
+    dx = x - self.center_x
+    dy = self.center_y - y
+    r_click = math.sqrt(dx * dx + dy * dy)
+    clamped_r = min(r_click, self.radius)
+    pan = -math.degrees(math.atan2(dy, dx))
+    if pan < 0:
+      pan += 360
+    tilt = -((clamped_r / self.radius) * 180 - 90)
+    return pan, tilt
+
+  def add_point_to_heat_buffer(self, cx: int, cy: int, heat_val: float,
+                               heat_buffer) -> None:
+    w, h = self.winfo_width(), self.winfo_height()
+
+    center_xi = int(cx)
+    center_yi = int(cy)
+
+    x_min = max(0, center_xi - self.heat_radius_px)
+    x_max = min(w - 1, center_xi + self.heat_radius_px)
+    y_min = max(0, center_yi - self.heat_radius_px)
+    y_max = min(h - 1, center_yi + self.heat_radius_px)
+
+    for ix in range(x_min, x_max + 1):
+      dx = ix - center_xi
+      for iy in range(y_min, y_max + 1):
+        dy = iy - center_yi
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist >= self.heat_radius_px or dist <= 0:
+          continue
+
+        falloff = 1.0 - (dist / self.heat_radius_px)
+        heat_contribution = heat_val * falloff
+        heat_buffer[ix][iy] += heat_contribution
+
+  def draw_heatmap(self, hotpoints: dict[tuple[float, float], float]) -> None:
+    """
+      Renders a smoothed radial heatmap: each hotpoint has a certain radius
+      of influence. We accumulate all heat contributions into a float buffer,
+      then map that buffer to a color scale.
+    """
+    w, h = self.winfo_width(), self.winfo_height()
+
+    heat_buffer = [[0.0] * h for _ in range(w)]
+    for (pan, tilt), heat_val in hotpoints.items():
+      cx, cy = self.to_canvas_coords(pan, tilt)
+      self.add_point_to_heat_buffer(cx, cy, heat_val, heat_buffer)
+
+    self.heatmap_image = Image.new("RGB", (w, h), "white")
+    pixels = self.heatmap_image.load()
+    for ix in range(w):
+      for iy in range(h):
+        val = min(1.0, heat_buffer[ix][iy])  # clamp
+        r = 255
+        g = 255 - int(val * 255)
+        b = 255 - int(val * 255)
+        pixels[ix, iy] = (r, g, b)
+
+    self.heatmap_photo = ImageTk.PhotoImage(self.heatmap_image)
+    if self.heatmap_obj_id:
+      self.delete(self.heatmap_obj_id)
+    self.heatmap_obj_id = self.create_image(0,
+                                            0,
+                                            anchor=tk.NW,
+                                            image=self.heatmap_photo)
+
+    self.tag_lower(self.heatmap_obj_id)
+
+  def draw_points(self, points, tag="points"):
+    self.delete(tag)
+    for (pan, tilt, c, r) in points:
+      x, y = self.to_canvas_coords(pan, tilt)
+      self.create_oval(x - r, y - r, x + r, y + r, fill=c, outline=c, tags=tag)
+
+
 class TrackMoveSequenceDialog(tk.Toplevel):
   """
-    Dialog for selecting and executing a sequence of stepped absolute moves
-    from predefined JSON sequences, including a circular plot for pan-tilt values.
+    Dialog that controls camera movements, displays a pan/tilt heatmap, 
+    and plots detections.
   """
 
   def __init__(self,
                master: tk.Tk,
-               camera: PTZCamera,
+               camera,
                seq_folder_path: str,
-               detection_pose_matcher: 'dt.DetectionPositionMatcher',
+               detection_pose_matcher,
                class_id_to_color: dict,
                class_id_to_name: dict,
                zoom_step: int = 10,
@@ -476,15 +608,14 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     self.camera = camera
     self.title(title)
     self.grab_set()
+
     self.sequences_dict = {}
-    self.seq_moves = cpg.SteppedMove()
     self._load_sequences(seq_folder_path)
-    self.sequence_queue = []
+
     self.detection_pose_matcher = detection_pose_matcher
     self.zoom_step = zoom_step
-    self.after(100, self.update_plot)
 
-    # UI parameters
+    # Canvas parameters
     self.legend_width = 100
     self.circle_area_width = 800
     self.canvas_width = self.circle_area_width + self.legend_width
@@ -493,12 +624,14 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     self.center_y = self.canvas_height / 2
     self.radius = self.center_y - 10
     self.class_id_to_color = {
-        class_id: f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-        for class_id, rgb in class_id_to_color.items()
+        cid: f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+        for cid, rgb in class_id_to_color.items()
     }
     self.class_id_to_name = class_id_to_name
+
     self._build_ui()
     self.break_sequence = False
+    self.after(100, self.update_plot)
 
   def _load_sequences(self, seq_folder_path: str) -> None:
     files = glob.glob(os.path.join(seq_folder_path, "*.json"))
@@ -511,7 +644,8 @@ class TrackMoveSequenceDialog(tk.Toplevel):
       except Exception as e:
         logging.error(f"Error loading {f}: {e}")
 
-  def _build_ui(self) -> None:
+  def _build_ui(self):
+    # Sequence selection
     tk.Label(self, text="Select Sequence File:").grid(row=0,
                                                       column=0,
                                                       padx=5,
@@ -526,37 +660,17 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                                                           pady=5)
     self.sequence_var.trace("w", lambda *args: self.on_run())
 
-    # Canvas for pan-tilt plot with click-to-move functionality
-    self.canvas = tk.Canvas(self,
-                            width=self.canvas_width,
-                            height=self.canvas_height,
-                            bg='white')
-    self.canvas.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
-    self.canvas.bind("<Button-1>", self.on_canvas_click)
-    # Draw circular boundary within the designated circle area
-    self.canvas.create_oval(self.center_x - self.radius,
-                            self.center_y - self.radius,
-                            self.center_x + self.radius,
-                            self.center_y + self.radius,
-                            outline='black')
+    # PanTiltCanvas
+    self.pt_canvas = PanTiltCanvas(self,
+                                   width=self.canvas_width,
+                                   height=self.canvas_height,
+                                   center_x=self.center_x,
+                                   center_y=self.center_y,
+                                   radius=self.radius)
+    self.pt_canvas.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
+    self.pt_canvas.bind("<Button-1>", self.on_canvas_click)
 
-    # Add degree markings around the circle
-    for angle in range(0, 360, 30):
-      rad = math.radians(angle)
-      x_outer = self.center_x + self.radius * math.cos(rad)
-      y_outer = self.center_y + self.radius * math.sin(rad)
-      x_inner = self.center_x + (self.radius - 10) * math.cos(rad)
-      y_inner = self.center_y + (self.radius - 10) * math.sin(rad)
-      self.canvas.create_line(x_inner, y_inner, x_outer, y_outer, fill="black")
-      x_label = self.center_x + (self.radius - 20) * math.cos(rad)
-      y_label = self.center_y + (self.radius - 20) * math.sin(rad)
-      self.canvas.create_text(x_label,
-                              y_label,
-                              text=str(angle),
-                              font=("Arial", 10),
-                              fill="black")
-
-    # Draw legend to the right of the circle based on class_id_to_color mapping
+    # Legend on the right side
     legend_start_x = self.circle_area_width + 10
     legend_start_y = 20
     box_size = 20
@@ -564,24 +678,24 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     for idx, (class_id,
               color) in enumerate(sorted(self.class_id_to_color.items())):
       y = legend_start_y + idx * (box_size + spacing)
-      self.canvas.create_rectangle(legend_start_x,
-                                   y,
-                                   legend_start_x + box_size,
-                                   y + box_size,
-                                   fill=color,
-                                   outline=color)
-      self.canvas.create_text(legend_start_x + box_size + 5,
-                              y + box_size / 2,
-                              text=self.class_id_to_name.get(class_id),
-                              anchor="w",
-                              font=("Arial", 10),
-                              fill="black")
+      self.pt_canvas.create_rectangle(legend_start_x,
+                                      y,
+                                      legend_start_x + box_size,
+                                      y + box_size,
+                                      fill=color,
+                                      outline=color)
+      self.pt_canvas.create_text(legend_start_x + box_size + 5,
+                                 y + box_size / 2,
+                                 text=self.class_id_to_name.get(
+                                     class_id, class_id),
+                                 anchor="w",
+                                 font=("Arial", 10),
+                                 fill="black")
 
-    # Zoom control UI: display current zoom and add + and - buttons
+    # Zoom controls
     zoom_frame = tk.Frame(self)
     zoom_frame.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
-    self.pose_label = tk.Label(zoom_frame, text=f"Zoom: {0}")
-    self.update_pose_label()
+    self.pose_label = tk.Label(zoom_frame, text="Zoom: 0")
     self.pose_label.grid(row=0, column=0, padx=5)
     tk.Button(zoom_frame, text="-", command=self.decrease_zoom).grid(row=0,
                                                                      column=1,
@@ -593,15 +707,36 @@ class TrackMoveSequenceDialog(tk.Toplevel):
   def stop_sequence(self) -> None:
     self.break_sequence = True
 
-  def on_canvas_click(self, event: tk.Event) -> None:
-    # Move camera to pan/tilt corresponding to clicked position
+  def on_canvas_click(self, event: tk.Event):
+    # Convert click to pan/tilt, then move camera
     self.stop_sequence()
-    pan, tilt = self.cartesian_to_pose(event.x, event.y)
-    pose = cpg.PTZCameraPose()
-    pose.pan = pan
-    pose.tilt = tilt
-    pose.zoom = self.detection_pose_matcher.curr_pose.get("zoom", 0)
-    self.camera.move_absolute(pose.pan, pose.tilt, pose.zoom)
+    pan, tilt = self.pt_canvas.to_pan_tilt_coords(event.x, event.y)
+    pose = self.detection_pose_matcher.curr_pose
+    zoom = pose.get("zoom", 0)
+
+    self.camera.move_absolute(pan, tilt, zoom)
+
+  def update_plot(self):
+    # Update label, draw heatmap, then detection points
+    self.update_pose_label()
+    hotpoints = self.detection_pose_matcher.heat_map.get_pan_tilt_heat_map()
+    self.pt_canvas.draw_heatmap(hotpoints)
+
+    # Show current camera pose
+    current_pan = self.detection_pose_matcher.curr_pose.get("pan", 0)
+    current_tilt = self.detection_pose_matcher.curr_pose.get("tilt", 0)
+    points = [(current_pan, current_tilt, "black", 5)]
+
+    # Show detection points
+    match_data = self.detection_pose_matcher.detection_pose_match_queue.copy()
+    for data in match_data:
+      for pose, class_id in zip(data.get("poses", []),
+                                data.get("class_ids", [])):
+        color = self.class_id_to_color.get(class_id, 'black')
+        points.append((pose.get("pan", 0), pose.get("tilt", 0), color, 3))
+
+    self.pt_canvas.draw_points(points)
+    self.after(100, self.update_plot)
 
   def update_pose_label(self) -> None:
     pitch_value = int(self.detection_pose_matcher.curr_pose.get("pan", 0))
@@ -628,63 +763,6 @@ class TrackMoveSequenceDialog(tk.Toplevel):
 
   def decrease_zoom(self) -> None:
     self.change_zoom(-self.zoom_step)
-
-  def plot_points(self):
-    self.canvas.delete("points")
-
-    cam_pose = self.detection_pose_matcher.curr_pose
-    x, y = self.pose_to_cartesian(cam_pose.get("pan", 0),
-                                  cam_pose.get("tilt", 0))
-    self.canvas.create_oval(x - 5,
-                            y - 5,
-                            x + 5,
-                            y + 5,
-                            fill="black",
-                            outline="black",
-                            tags="points")
-
-    if not self.detection_pose_matcher.detection_pose_match_queue:
-      return
-
-    match_data = self.detection_pose_matcher.detection_pose_match_queue.copy()
-    for data in match_data:
-      for pose, class_id in zip(data.get("poses", []),
-                                data.get("class_ids", [])):
-        pan = pose.get("pan", 0)
-        tilt = pose.get("tilt", 0)
-        x, y = self.pose_to_cartesian(pan, tilt)
-        color = self.class_id_to_color.get(class_id, 'black')
-        self.canvas.create_oval(x - 2,
-                                y - 2,
-                                x + 2,
-                                y + 2,
-                                fill=color,
-                                outline=color,
-                                tags="points")
-
-  def cartesian_to_pose(self, x: float, y: float) -> tuple:
-    dx = x - self.center_x
-    dy = self.center_y - y  # Invert y-axis
-    radius_click = math.sqrt(dx * dx + dy * dy)
-    clamped_radius = min(radius_click, self.radius)
-    pan = -math.degrees(math.atan2(dy, dx))
-    if pan < 0:
-      pan += 360
-    tilt = -((clamped_radius / self.radius) * 180 - 90)
-    return pan, tilt
-
-  def pose_to_cartesian(self, pan: float, tilt: float) -> tuple:
-    pan_rad = math.radians(pan)
-    radius = ((-tilt + 90) / 180) * self.radius
-    radius = min(radius, self.radius)
-    x = self.center_x + radius * math.cos(pan_rad)
-    y = self.center_y + radius * math.sin(pan_rad)
-    return x, y
-
-  def update_plot(self):
-    self.update_pose_label()
-    self.plot_points()
-    self.after(100, self.update_plot)
 
   def on_run(self) -> None:
     file_key = self.sequence_var.get()
