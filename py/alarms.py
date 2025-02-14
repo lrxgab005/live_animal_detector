@@ -21,11 +21,14 @@ class Alarm:
                remote_player_url="http://127.0.0.1:5000"):
     self.alarm_triggers = alarm_triggers
     self.class_id_names = class_id_names
-    self.notificaion_sound_file_path = os.path.join(
-        config.SOUNDS_PATH, notificaion_sound_file_name)
-    self.alarm_sound_file_name = alarm_sound_file_name
-    if self.notificaion_sound_file_path:
+
+    self.notificaion_sound_file_path = None
+    if notificaion_sound_file_name:
       pygame.mixer.init()
+      self.notificaion_sound_file_path = os.path.join(
+          config.SOUNDS_PATH, notificaion_sound_file_name)
+
+    self.alarm_sound_file_name = alarm_sound_file_name
     self.alarm_cool_down_s = alarm_cool_down_s
     self.last_alarm_s = time.time()
     self.remote_player_url = remote_player_url
@@ -44,9 +47,14 @@ class Alarm:
 
     if alarm:
       self.last_alarm_s = time.time()
-      pygame.mixer.Sound(self.notificaion_sound_file_path).play()
-      logging.info(f"Playing alarm sound: {self.alarm_sound_file_name}")
-      self.play_sound_on_remote(self.alarm_sound_file_name)
+      if self.notificaion_sound_file_path:
+        logging.info(
+            f"Playing notification sound: {self.notificaion_sound_file_path}")
+        pygame.mixer.Sound(self.notificaion_sound_file_path).play()
+
+      if self.alarm_sound_file_name:
+        logging.info(f"Playing alarm sound: {self.alarm_sound_file_name}")
+        self.play_sound_on_remote(self.alarm_sound_file_name)
 
     return alarm_detetions
 

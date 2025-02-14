@@ -54,7 +54,7 @@ ALARM_COLORS = {
     for class_id, color in zip(ALARM_TRIGGERS.keys(),
                                generate_colors(len(ALARM_TRIGGERS)))
 }
-NOTIFICATION_SOUND_FILE_NAME = "notification_00.mp3"
+NOTIFICATION_SOUND_FILE_NAME = None  # "notification_00.mp3"
 ALARM_SOUND_FILE_NAME = "notification_00.mp3"
 ALARM_COOL_DOWN_S = 20
 
