@@ -1,7 +1,7 @@
 [
   {
     "start_pose": {
-      "pan": 325,
+      "pan": 305,
       "tilt": 18,
       "zoom": 50,
       "wait_time_ms": 3000
@@ -16,7 +16,7 @@
   },
   {
     "start_pose": {
-      "pan": 330,
+      "pan": 305,
       "tilt": 30,
       "zoom": 147,
       "wait_time_ms": 3000
@@ -46,7 +46,7 @@
   },
   {
     "start_pose": {
-      "pan": 330,
+      "pan": 305,
       "tilt": 15,
       "zoom": 147,
       "wait_time_ms": 3000
