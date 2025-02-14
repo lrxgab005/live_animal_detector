@@ -23,12 +23,12 @@ class DynamicHeatmap:
   def __init__(self,
                pan_bins: int = 360,
                tilt_bins: int = 100,
-               global_decay: float = 0.99,
-               local_decay: float = 0.8,
+               global_decay: float = 0.001,
+               local_decay: float = 0.2,
                motion_blur: float = 1,
                max_zoom: float = 200,
-               tilt_range: list = [1, 10],
-               pan_range: list = [2, 50]) -> None:
+               tilt_sigma_scale: list = 5,
+               pan_sigma_scale: list = 15) -> None:
     self.heatmap = np.zeros((pan_bins, tilt_bins))
     self.global_decay = global_decay
     self.local_decay = local_decay
@@ -37,8 +37,8 @@ class DynamicHeatmap:
     self.tilt_bins = tilt_bins
     self.total_bins = tilt_bins * pan_bins
     self.max_zoom = max_zoom
-    self.pan_area_range = pan_range
-    self.tilt_area_range = tilt_range
+    self.pan_sigma_scale = pan_sigma_scale
+    self.tilt_sigma_scale = tilt_sigma_scale
 
   def pan_tilt_to_bin(self, pan: float, tilt: float) -> tuple:
     p_idx = int((pan % 360) / 360 * self.pan_bins)
@@ -52,61 +52,66 @@ class DynamicHeatmap:
     tilt = (t_idx / self.tilt_bins) * 180 - 90
     return pan, tilt
 
+  def zoom_to_sigma(self, zoom: float) -> float:
+    zoom_scale = 1 - np.clip(zoom / self.max_zoom, 0, 1)
+    sigma_x = zoom_scale * self.pan_sigma_scale
+    sigma_y = zoom_scale * self.tilt_sigma_scale
+    return sigma_x, sigma_y
+
   def get_heatval_at_pan_tilt(self, pan: float, tilt: float) -> float:
     p_idx, t_idx = self.pan_tilt_to_bin(pan, tilt)
     return self.heatmap[p_idx, t_idx]
 
-  def add_gaussian_heat(self,
-                        pan: float,
-                        tilt: float,
-                        sigma: float,
-                        heat: float = 1.0) -> None:
-    p_idx, t_idx = self.pan_tilt_to_bin(pan, tilt)
+  def make_gaussian_kernel(self, pan: float, tilt: float, sigma_x: float,
+                           sigma_y: float) -> np.ndarray:
 
-    # Create coordinate grids
+    p_idx, t_idx = self.pan_tilt_to_bin(pan, tilt)
     y, x = np.ogrid[-t_idx:self.tilt_bins - t_idx,
                     -p_idx:self.pan_bins - p_idx]
 
-    # Calculate gaussian kernel
-    kernel = heat * np.exp(-(x * x + y * y) / (2.0 * sigma**2))
+    eps = 1e-10
+    return np.exp(-(x**2 / (2.0 * (sigma_x**2 + eps)) + y**2 /
+                    (2.0 * (sigma_y**2 + eps))))
 
-    # Add kernel to heatmap
+  def add_gaussian_heat(self,
+                        pan: float,
+                        tilt: float,
+                        sigma_x: float,
+                        sigma_y: float,
+                        heat: float = 1.0) -> None:
+
+    kernel = heat * self.make_gaussian_kernel(pan, tilt, sigma_x, sigma_y)
     self.heatmap = np.maximum(self.heatmap, kernel.T)
 
-  def convertPoseToBinArea(self, pose: dict) -> tuple:
-    pan_width = np.interp((self.max_zoom - pose["zoom"]), [0, self.max_zoom],
-                          self.pan_area_range)
-    tilt_height = np.interp((self.max_zoom - pose["zoom"]), [0, self.max_zoom],
-                            self.tilt_area_range)
+  def subtract_gaussian_heat(self,
+                             pan: float,
+                             tilt: float,
+                             sigma_x: float,
+                             sigma_y: float,
+                             heat: float = 1.0) -> None:
 
-    pan_min = pose["pan"] - pan_width / 2
-    pan_max = pose["pan"] + pan_width / 2
-    tilt_min = pose["tilt"] - tilt_height / 2
-    tilt_max = pose["tilt"] + tilt_height / 2
+    kernel = heat * self.make_gaussian_kernel(pan, tilt, sigma_x, sigma_y)
+    inverted_kernel = np.subtract(1, kernel)
+    self.heatmap = np.multiply(self.heatmap, inverted_kernel.T)
 
-    p_min, t_min = self.pan_tilt_to_bin(pan_min, tilt_min)
-    p_max, t_max = self.pan_tilt_to_bin(pan_max, tilt_max)
+  def decay_heatmap(self, camera_pose: dict) -> None:
+    # self.heatmap *= (1 - self.global_decay)  # Global decay
 
-    bins = []
-    for p_idx in range(p_min, p_max):
-      for t_idx in range(t_min, t_max):
-        bins.append((p_idx, t_idx))
+    # Decay over camera view area
+    sigma_x, sigma_y = self.zoom_to_sigma(camera_pose["zoom"])
+    self.subtract_gaussian_heat(camera_pose["pan"],
+                                camera_pose["tilt"],
+                                sigma_x=sigma_x,
+                                sigma_y=sigma_y,
+                                heat=self.local_decay)
 
-    return bins
-
-  def update(self, detections: dict, camera_pose: dict) -> None:
-    self.heatmap *= self.global_decay  # Global decay
-
-    # # Decay over camera view area
-    # decay_bins = self.convertPoseToBinArea(camera_pose)
-    # decay_scale = len(decay_bins) / self.total_bins
-    # self.heatmap[decay_bins] *= self.local_decay * decay_scale  # Local decay
-
+  def update(self, detections: dict) -> None:
     for pose, score in zip(detections["poses"], detections["scores"]):
-      sigma = (pose["zoom"] / self.max_zoom) * 2
+      sigma_x, sigma_y = self.zoom_to_sigma(pose["zoom"])
       self.add_gaussian_heat(pose["pan"],
                              pose["tilt"],
-                             sigma=sigma,
+                             sigma_x=sigma_x,
+                             sigma_y=sigma_y,
                              heat=score)
 
   def get_map(self) -> np.ndarray:
@@ -215,6 +220,7 @@ class DetectionPositionMatcher:
   def collect_camera_poses(self) -> None:
     while True:
       pose = self.camera.get_status()
+      self.heat_map.decay_heatmap(pose)
       if not pose:
         time.sleep(0.1)
         continue
@@ -240,7 +246,7 @@ class DetectionPositionMatcher:
         detections = self.cam_detection_data_queue.popleft()
         cam_pose = self.cam_pose_queue.popleft()
         self.add_poses_to_detections(detections, cam_pose)
-        self.heat_map.update(detections, cam_pose)
+        self.heat_map.update(detections)
         self.detection_pose_match_queue.append(detections)
         logging.debug(
             f"Nr of matches: {len(self.detection_pose_match_queue)}, "
