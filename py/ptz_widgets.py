@@ -508,7 +508,7 @@ class PanTiltCanvas(tk.Canvas):
 
   def to_canvas_coords(self, pan: float, tilt: float) -> tuple[float, float]:
     pan_rad = math.radians(pan)
-    r = ((-tilt + 90) / 180) * self.radius
+    r = ((-tilt + 45) / 90) * self.radius
     r = min(r, self.radius)
     x = self.center_x + r * math.cos(pan_rad)
     y = self.center_y + r * math.sin(pan_rad)
@@ -522,7 +522,7 @@ class PanTiltCanvas(tk.Canvas):
     pan = -math.degrees(math.atan2(dy, dx))
     if pan < 0:
       pan += 360
-    tilt = -((clamped_r / self.radius) * 180 - 90)
+    tilt = -((clamped_r / self.radius) * 90 - 45)
     return pan, tilt
 
   def add_point_to_heat_buffer(self, cx: int, cy: int, heat_val: float,
