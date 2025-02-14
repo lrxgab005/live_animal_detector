@@ -24,7 +24,12 @@ class CameraStreamer:
   def read_frame(self):
     ret, frame = self.cap.read()
     if not ret:
-      return None
+      if os.path.isfile(self.url):
+        self.cap.release()
+        self.cap = cv2.VideoCapture(self.url)
+        return self.read_frame()
+      else:
+        return None
     return frame
 
   def release(self):
