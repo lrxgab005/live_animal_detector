@@ -20,7 +20,7 @@ FRAME_DATA_PORT = 4545
 
 # Frame detection settings
 MIN_DETECTION_POSE_DT_MS = 500
-FRAME_TO_POSE_LATENCY_MS = -900
+FRAME_TO_POSE_LATENCY_MS = -1350
 
 # Camera Intrinsics
 IMG_WIDTH = 1920
@@ -32,12 +32,12 @@ FY_SCALE = 17
 ALARM_TRIGGERS = {
     0: 0.8,
     2: 0.8,
-    14: 0.7,
-    16: 0.7,
-    17: 0.2,
-    18: 0.2,
-    19: 0.2,
-    20: 0.2,
+    14: 0.8,
+    16: 0.0,
+    17: 0.0,
+    18: 0.0,
+    19: 0.0,
+    20: 0.0,
 }
 ALARM_NAMES = {
     0: "Human",
