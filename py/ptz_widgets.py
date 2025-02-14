@@ -586,7 +586,7 @@ class PanTiltCanvas(tk.Canvas):
     self.delete(tag)
     for (pan, tilt, c, r) in points:
       x, y = self.to_canvas_coords(pan, tilt)
-      self.create_oval(x - r, y - r, x + r, y + r, fill=c, outline=c, tags=tag)
+      self.create_oval(x - r, y - r, x + r, y + r, outline=c, tags=tag)
 
 
 class TrackMoveSequenceDialog(tk.Toplevel):
@@ -725,7 +725,9 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     # Show current camera pose
     current_pan = self.detection_pose_matcher.curr_pose.get("pan", 0)
     current_tilt = self.detection_pose_matcher.curr_pose.get("tilt", 0)
-    points = [(current_pan, current_tilt, "black", 5)]
+    current_zoom = self.detection_pose_matcher.curr_pose.get("zoom", 0)
+    point_radius = (1 - current_zoom / 250) * (self.circle_area_width / 20)
+    points = [(current_pan, current_tilt, "black", point_radius)]
 
     # Show detection points
     match_data = self.detection_pose_matcher.detection_pose_match_queue.copy()
