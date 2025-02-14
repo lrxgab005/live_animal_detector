@@ -7,7 +7,6 @@ import datetime
 import collections
 import network
 from ptz_network_lib import PTZCamera
-from scipy.ndimage import gaussian_filter
 import logging
 
 # Configure logging
@@ -57,6 +56,23 @@ class DynamicHeatmap:
     p_idx, t_idx = self.pan_tilt_to_bin(pan, tilt)
     return self.heatmap[p_idx, t_idx]
 
+  def add_gaussian_heat(self,
+                        pan: float,
+                        tilt: float,
+                        sigma: float,
+                        heat: float = 1.0) -> None:
+    p_idx, t_idx = self.pan_tilt_to_bin(pan, tilt)
+
+    # Create coordinate grids
+    y, x = np.ogrid[-t_idx:self.tilt_bins - t_idx,
+                    -p_idx:self.pan_bins - p_idx]
+
+    # Calculate gaussian kernel
+    kernel = heat * np.exp(-(x * x + y * y) / (2.0 * sigma**2))
+
+    # Add kernel to heatmap
+    self.heatmap = np.maximum(self.heatmap, kernel.T)
+
   def convertPoseToBinArea(self, pose: dict) -> tuple:
     pan_width = np.interp((self.max_zoom - pose["zoom"]), [0, self.max_zoom],
                           self.pan_area_range)
@@ -87,16 +103,16 @@ class DynamicHeatmap:
     # self.heatmap[decay_bins] *= self.local_decay * decay_scale  # Local decay
 
     for pose, score in zip(detections["poses"], detections["scores"]):
-      p_idx, t_idx = self.pan_tilt_to_bin(pose["pan"], pose["tilt"])
-      self.heatmap[p_idx, t_idx] += score
-
-    self.heatmap = gaussian_filter(self.heatmap, sigma=self.motion_blur)
+      sigma = (pose["zoom"] / self.max_zoom) * 2
+      self.add_gaussian_heat(pose["pan"],
+                             pose["tilt"],
+                             sigma=sigma,
+                             heat=score)
 
   def get_map(self) -> np.ndarray:
     return self.heatmap
 
   def get_norm_heatval(self, p_idx, t_idx) -> float:
-    # return self.heatmap[p_idx, t_idx] / np.max(self.heatmap)
     return np.clip(self.heatmap[p_idx, t_idx], 0, 1)
 
   def get_pan_tilt_heat_map(self) -> dict:

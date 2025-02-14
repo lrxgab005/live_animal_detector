@@ -471,7 +471,7 @@ class PanTiltCanvas(tk.Canvas):
                center_x: float,
                center_y: float,
                radius,
-               heat_radius_px: float = 10.0,
+               heat_radius_px: int = 10,
                **kwargs):
     super().__init__(master, width=width, height=height, bg='white', **kwargs)
     self.center_x = center_x
