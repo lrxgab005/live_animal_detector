@@ -24,10 +24,10 @@ class DynamicHeatmap:
                pan_bins: int = 360,
                tilt_bins: int = 100,
                global_decay: float = 0.001,
-               local_decay: float = 0.2,
+               local_decay: float = 0.1,
                motion_blur: float = 1,
-               max_zoom: float = 200,
-               tilt_sigma_scale: list = 5,
+               max_zoom: float = 300,
+               tilt_sigma_scale: list = 3,
                pan_sigma_scale: list = 15) -> None:
     self.heatmap = np.zeros((pan_bins, tilt_bins))
     self.global_decay = global_decay
@@ -53,7 +53,7 @@ class DynamicHeatmap:
     return pan, tilt
 
   def zoom_to_sigma(self, zoom: float) -> float:
-    zoom_scale = 1 - np.clip(zoom / self.max_zoom, 0, 1)
+    zoom_scale = 1 - np.clip(0.01 + zoom / self.max_zoom, 0, 1)
     sigma_x = zoom_scale * self.pan_sigma_scale
     sigma_y = zoom_scale * self.tilt_sigma_scale
     return sigma_x, sigma_y
@@ -108,6 +108,7 @@ class DynamicHeatmap:
   def update(self, detections: dict) -> None:
     for pose, score in zip(detections["poses"], detections["scores"]):
       sigma_x, sigma_y = self.zoom_to_sigma(pose["zoom"])
+      print(f"Sigma x: {sigma_x}, Sigma y: {sigma_y}, Zoom: {pose['zoom']}")
       self.add_gaussian_heat(pose["pan"],
                              pose["tilt"],
                              sigma_x=sigma_x,
