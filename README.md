@@ -11,20 +11,16 @@ A distributed system that processes network camera video streams using YOLO obje
 The system consists of three interconnected components:
 
 ```
-+-----------------+         +-----------------+
-|  Detection Node |         |   Audio Node    |
-|                 |  HTTP   |                 |
-|  - YOLO Model   |-------->|  - REST API     |
-|  - PTZ Control  |         |  - Audio Player |
-+--------+--------+         +-----------------+
-         |
-         | RTSP + HTTP
-         v
-+------------------+
-|   PTZ Camera     |
-|  - Video Feed    |
-|  - Movement API  |
-+------------------+
+    PTZ Camera------------------------
+        ʌ                            |
+        | HTTP REST                  | RTSP
+        |                            v 
++------------------+      +-----------------+         +-----------------+
+|   PTZ Camera     | UDP  |  Detection Node |  HTTP   |   Audio Node    |
+|  - Video Feed    |<---- |                 |  REST   |                 |
+|  - Movement API  |      |  - YOLO Model   |-------->|  - REST API     |
+|  - Detections VIZ|      |  - PTZ Control  |         |  - Audio Player |
++------------------+      +--------+--------+         +-----------------+
 ```
 
 ### **Object Detection Server**
