@@ -16,7 +16,7 @@ The system consists of three interconnected components:
         | HTTP REST                  | RTSP
         |                            v 
 +------------------+      +-----------------+         +-----------------+
-|   PTZ Camera     | UDP  |  Detection Node |  HTTP   |   Audio Node    |
+|        UI        | UDP  |  Detection Node |  HTTP   |   Audio Node    |
 |  - Video Feed    |<---- |                 |  REST   |                 |
 |  - Movement API  |      |  - YOLO Model   |-------->|  - REST API     |
 |  - Detections VIZ|      |  - PTZ Control  |         |  - Audio Player |
