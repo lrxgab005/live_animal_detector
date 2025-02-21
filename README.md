@@ -31,7 +31,7 @@ The system consists of three interconnected components:
 - Captures RTSP video stream from network camera
 - Runs YOLO object detection on captured frames
 - Sends alarm triggers via HTTP POST to Audio Server
-- Controls PTZ camera via HTTP/REST with digest authentication
+- Controls PTZ camera via HTTP/REST
 
 ### **Audio Server**
 - REST API endpoints:
@@ -47,7 +47,7 @@ The system consists of three interconnected components:
 
 ### Communication Protocols
 - Camera Stream: RTSP over TCP
-- PTZ Control: HTTP REST with digest authentication
+- PTZ Control: HTTP REST
 - Audio Control: HTTP REST (JSON)
 
 ## Setup
