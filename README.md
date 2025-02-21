@@ -43,7 +43,6 @@ The system consists of three interconnected components:
 ### **PTZ Network Camera**
 - Provides RTSP video stream
 - Sends HTTP/REST commands for PTZ control
-- Uses digest authentication for API security
 
 ### Communication Protocols
 - Camera Stream: RTSP over TCP
