@@ -2,6 +2,10 @@
 
 A distributed system that processes network camera video streams using YOLO object detection for real-time wildlife monitoring and interaction. Combines PTZ camera tracking with configurable audio responses through remote-controlled speakers.
 
+![Animal Detection Image](data/readme_imgs/birds_kudus_detection_img.jpg)
+
+![2D Interface Image](data/readme_imgs/2d_interface_image.jpg)
+
 ## Server Architecture
 
 The system consists of three interconnected components:
