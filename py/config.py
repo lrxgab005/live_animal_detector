@@ -30,24 +30,30 @@ FY_SCALE = 17
 
 # Alarm Settings
 ALARM_TRIGGERS = {
-    0: 0.8,
+    0: 0.0,
     2: 0.8,
     14: 0.8,
+    15: 0.0,
     16: 0.0,
     17: 0.0,
     18: 0.0,
     19: 0.0,
-    20: 0.0,
+    21: 0.0,
+    22: 0.0,
+    23: 0.0,
 }
 ALARM_NAMES = {
     0: "Human",
     2: "Car",
     14: "Bird",
+    15: "cat",
     16: "Dog",
     17: "Horse",
     18: "Sheep",
     19: "Cow",
-    20: "Zebra",
+    21: "Bear",
+    22: "Zebra",
+    23: "Giraffe",
 }
 ALARM_COLORS = {
     class_id: color
@@ -78,6 +84,9 @@ os.makedirs(SOUNDS_PATH, exist_ok=True)
 os.makedirs(IMGS_PATH, exist_ok=True)
 os.makedirs(CAM_CONFIG_PATH, exist_ok=True)
 
+# Camera Settings
+USER, PASSWORD, HOST, PORT, CHANNEL, CAMERA_URL = None, None, None, None, None, None
+
 
 def load_cam_settings(file_path):
   global USER, PASSWORD, HOST, PORT, CHANNEL, CAMERA_URL
@@ -94,4 +103,5 @@ def load_cam_settings(file_path):
                 f':{PORT}/Streaming/Channels/{CHANNEL}')
 
 
-CAMERA_URL = 0  # Uses webcam by default
+# Default to webcam if no config loaded
+CAMERA_URL = 0
