@@ -4,5 +4,4 @@ numpy
 torch
 pygame
 tk
-pytesseract
 tenacity
