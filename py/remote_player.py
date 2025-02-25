@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+import flask
+from typing import Dict, Any, Optional
 import pygame
 import logging
 import os
@@ -9,7 +10,7 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s: %(message)s")
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser(description='Audio server')
   parser.add_argument('--host',
                       type=str,
@@ -22,45 +23,45 @@ def parse_args():
   return parser.parse_args()
 
 
-app = Flask(__name__)
+app = flask.Flask(__name__)
 pygame.mixer.init()
 
 
 @app.route('/play', methods=['POST'])
-def play_endpoint():
-  data = request.json
+def play_endpoint() -> tuple[flask.Response, int]:
+  data: Optional[Dict[str, Any]] = flask.request.json
   if data is None:
-    logging.error("Invalid JSON in request")
-    return jsonify({"error": "Invalid JSON"}), 400
+    logging.error("Invalid JSON in flask.request")
+    return flask.jsonify({"error": "Invalid JSON"}), 400
 
-  file_path = os.path.join(config.SOUNDS_PATH, data.get("file_name", ""))
+  file_path: str = os.path.join(config.SOUNDS_PATH, data.get("file_name", ""))
 
   if not os.path.exists(file_path):
     logging.error(f"Cant find {file_path}")
-    return jsonify({"error": f"Cant find {file_path}"}), 400
+    return flask.jsonify({"error": f"Cant find {file_path}"}), 400
 
   try:
     pygame.mixer.music.stop()
     pygame.mixer.music.load(file_path)
     pygame.mixer.music.play(0)
     logging.info(f"Playing audio: {file_path}")
-    return jsonify({
+    return flask.jsonify({
         "file": os.path.basename(file_path),
         "status": "Playing",
     }), 200
   except Exception as e:
     logging.error(f"Failed to play audio {file_path}: {str(e)}")
-    return jsonify({"error": str(e)}), 500
+    return flask.jsonify({"error": str(e)}), 500
 
 
 @app.route('/stop', methods=['POST'])
-def stop_endpoint():
+def stop_endpoint() -> tuple[flask.Response, int]:
   pygame.mixer.music.stop()
   logging.info("Stopped audio playback")
-  return jsonify({"status": "Stopped"}), 200
+  return flask.jsonify({"status": "Stopped"}), 200
 
 
 if __name__ == '__main__':
-  args = parse_args()
+  args: argparse.Namespace = parse_args()
   logging.info(f"Starting audio server on {args.host}:{args.port}")
   app.run(host=args.host, port=args.port)

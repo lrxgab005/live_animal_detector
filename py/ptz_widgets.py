@@ -19,8 +19,10 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s: %(message)s")
 
 
-def start_ptz_controller(camera_config=None) -> None:
-  """Initialize the PTZ controller UI and start the Tkinter main loop."""
+def start_ptz_controller(camera_config: str | None = None) -> None:
+  """
+    Initialize the PTZ controller UI and start the Tkinter main loop.
+  """
 
   if camera_config:
     config.load_cam_settings(camera_config)
@@ -165,7 +167,7 @@ class PTZControllerUI:
     High-level controller bridging the camera API and the UI.
     Offers timed moves (one-shot), continuous moves,
     absolute moves, and preset functions.
-    """
+  """
 
   def __init__(self, root: tk.Tk, camera: PTZCamera) -> None:
     self.root = root
@@ -465,22 +467,22 @@ class PanTiltCanvas(tk.Canvas):
   """
 
   def __init__(self,
-               master,
+               master: tk.Tk,
                width: int,
                height: int,
                center_x: float,
                center_y: float,
-               radius,
+               radius: float,
                heat_radius_px: int = 10,
-               **kwargs):
+               **kwargs) -> None:
     super().__init__(master, width=width, height=height, bg='white', **kwargs)
     self.center_x = center_x
     self.center_y = center_y
     self.radius = radius
     self.heat_radius_px = heat_radius_px
-    self.heatmap_image = None
-    self.heatmap_photo = None
-    self.heatmap_obj_id = None
+    self.heatmap_image: Image.Image | None = None
+    self.heatmap_photo: ImageTk.PhotoImage | None = None
+    self.heatmap_obj_id: int | None = None
 
     # Draw boundary circle
     self.create_oval(self.center_x - self.radius,
@@ -526,7 +528,7 @@ class PanTiltCanvas(tk.Canvas):
     return pan, tilt
 
   def add_point_to_heat_buffer(self, cx: int, cy: int, heat_val: float,
-                               heat_buffer) -> None:
+                               heat_buffer: list[list[float]]) -> None:
     w, h = self.winfo_width(), self.winfo_height()
 
     center_xi = int(cx)
@@ -582,7 +584,9 @@ class PanTiltCanvas(tk.Canvas):
 
     self.tag_lower(self.heatmap_obj_id)
 
-  def draw_points(self, points, tag="points"):
+  def draw_points(self,
+                  points: list[tuple[float, float, str, float]],
+                  tag: str = "points") -> None:
     self.delete(tag)
     for (pan, tilt, c, r) in points:
       x, y = self.to_canvas_coords(pan, tilt)
@@ -597,11 +601,11 @@ class TrackMoveSequenceDialog(tk.Toplevel):
 
   def __init__(self,
                master: tk.Tk,
-               camera,
+               camera: PTZCamera,
                seq_folder_path: str,
-               detection_pose_matcher,
-               class_id_to_color: dict,
-               class_id_to_name: dict,
+               detection_pose_matcher: dt.DetectionPositionMatcher,
+               class_id_to_color: dict[int, tuple[int, int, int]],
+               class_id_to_name: dict[int, str],
                zoom_step: int = 10,
                title: str = "2D Detection Plot") -> None:
     super().__init__(master)
@@ -609,7 +613,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     self.title(title)
     self.grab_set()
 
-    self.sequences_dict = {}
+    self.sequences_dict: dict[str, list[dict]] = {}
     self._load_sequences(seq_folder_path)
 
     self.detection_pose_matcher = detection_pose_matcher
@@ -646,7 +650,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
       except Exception as e:
         logging.error(f"Error loading {f}: {e}")
 
-  def _build_ui(self):
+  def _build_ui(self) -> None:
     # Sequence selection
     tk.Label(self, text="Select Sequence File:").grid(row=0,
                                                       column=0,
@@ -730,7 +734,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
 
     self.camera.move_absolute(pan, tilt, zoom)
 
-  def update_plot(self):
+  def update_plot(self) -> None:
     # Update label, draw heatmap, then detection points
     self.update_pose_label()
     hotpoints = self.detection_pose_matcher.heat_map.get_pan_tilt_heat_map()
@@ -819,7 +823,7 @@ class BBoxMoveDialog(tk.Toplevel):
 
   def __init__(self,
                master: tk.Tk,
-               camera,
+               camera: PTZCamera,
                converter: 'dt.BBoxCameraPoseConverter',
                title: str = "BBox Move") -> None:
     super().__init__(master)
@@ -831,15 +835,15 @@ class BBoxMoveDialog(tk.Toplevel):
                             height=self.converter.img_height,
                             bg="gray")
     self.canvas.pack()
-    self.start_x = None
-    self.start_y = None
-    self.rect = None
-    self.raw_bbox = None
+    self.start_x: int | None = None
+    self.start_y: int | None = None
+    self.rect: int | None = None  # Canvas object ID
+    self.raw_bbox: list[float] | None = None
     self.canvas.bind("<ButtonPress-1>", self.on_button_press)
     self.canvas.bind("<B1-Motion>", self.on_move_press)
     self.canvas.bind("<ButtonRelease-1>", self.on_button_release)
 
-  def on_button_press(self, event):
+  def on_button_press(self, event: tk.Event) -> None:
     self.start_x = event.x
     self.start_y = event.y
     self.rect = self.canvas.create_rectangle(self.start_x,
@@ -848,18 +852,19 @@ class BBoxMoveDialog(tk.Toplevel):
                                              self.start_y,
                                              outline="red")
 
-  def on_move_press(self, event):
+  def on_move_press(self, event: tk.Event) -> None:
     cur_x, cur_y = event.x, event.y
     self.raw_bbox = [self.start_x, self.start_y, cur_x, cur_y]
     self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
 
-  def on_button_release(self, event):
+  def on_button_release(self, event: tk.Event) -> None:
+    if not self.raw_bbox or not self.rect:
+      return
+
     x0, y0, x1, y1 = self.raw_bbox
-    # x0, y0, x1, y1 = self.canvas.coords(self.rect)
     bbox = [x0, y0, x1, y1]
 
     try:
-      # Assume camera.get_status() returns a dict: {"pan": ..., "tilt": ..., "zoom": ...}
       current_pose = self.camera.get_status()
       new_params = self.converter.convert(bbox, current_pose)
       self.camera.move_absolute(new_params["pan"], new_params["tilt"],

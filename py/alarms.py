@@ -1,3 +1,4 @@
+from typing import Dict, Tuple, Optional
 import logging
 import pygame
 import time
@@ -13,16 +14,16 @@ logging.basicConfig(level=logging.INFO,
 class Alarm:
 
   def __init__(self,
-               alarm_triggers={},
-               class_id_names={},
-               notificaion_sound_file_name=None,
-               alarm_sound_file_name=None,
-               alarm_cool_down_s=5,
-               remote_player_url="http://127.0.0.1:5000"):
+               alarm_triggers: Dict[int, float] = {},
+               class_id_names: Dict[int, str] = {},
+               notificaion_sound_file_name: Optional[str] = None,
+               alarm_sound_file_name: Optional[str] = None,
+               alarm_cool_down_s: float = 5,
+               remote_player_url: str = "http://127.0.0.1:5000") -> None:
     self.alarm_triggers = alarm_triggers
     self.class_id_names = class_id_names
 
-    self.notificaion_sound_file_path = None
+    self.notificaion_sound_file_path: Optional[str] = None
     if notificaion_sound_file_name:
       pygame.mixer.init()
       self.notificaion_sound_file_path = os.path.join(
@@ -33,7 +34,7 @@ class Alarm:
     self.last_alarm_s = time.time()
     self.remote_player_url = remote_player_url
 
-  def __call__(self, detection_frame):
+  def __call__(self, detection_frame: dt.DetectionFrame) -> dt.DetectionFrame:
     alarm_detetions = dt.DetectionFrame(detection_frame.image_frame)
     alarm = False
     for bbox, class_id, score in zip(detection_frame.bboxes,
@@ -58,7 +59,7 @@ class Alarm:
 
     return alarm_detetions
 
-  def check_alarm(self, class_id, score):
+  def check_alarm(self, class_id: int, score: float) -> bool:
     if class_id not in self.alarm_triggers:
       return False
     if score < self.alarm_triggers[class_id]:
@@ -68,7 +69,7 @@ class Alarm:
 
     return True
 
-  def play_sound_on_remote(self, sound_file_name):
+  def play_sound_on_remote(self, sound_file_name: str) -> None:
     try:
       response = requests.post(f"{self.remote_player_url}/play",
                                json={"file_name": sound_file_name})

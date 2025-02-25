@@ -1,3 +1,4 @@
+from typing import List, Optional, Dict, Any, Callable
 import logging
 import numpy as np
 
@@ -7,16 +8,20 @@ logging.basicConfig(level=logging.INFO,
 
 class PTZCameraPose:
   """
-    Represents a camera pose.
+  Represents a camera pose.
   """
 
-  def __init__(self, pan=0, tilt=0, zoom=0, wait_time_ms=1000):
+  def __init__(self,
+               pan: float = 0,
+               tilt: float = 0,
+               zoom: float = 0,
+               wait_time_ms: int = 1000) -> None:
     self.pan = pan
     self.tilt = tilt
     self.zoom = zoom
     self.wait_time_ms = wait_time_ms
 
-  def load_from_dict(self, data):
+  def load_from_dict(self, data: Optional[Dict[str, Any]]) -> 'PTZCameraPose':
     if not data:
       logging.error("Invalid data for PTZCameraPose")
 
@@ -31,10 +36,10 @@ class PTZCameraPose:
 
     return self
 
-  def get_list(self):
+  def get_list(self) -> List[float]:
     return [self.pan, self.tilt, self.zoom, self.wait_time_ms]
 
-  def __str__(self):
+  def __str__(self) -> str:
     return (f"pan: {np.round(self.pan, 2)}, "
             f"tilt: {np.round(self.tilt, 2)}, "
             f"zoom: {np.round(self.zoom, 2)}, "
@@ -43,16 +48,20 @@ class PTZCameraPose:
 
 class SteppedMove:
   """
-    Represents a linear sequence of steps between two camera poses.
+  Represents a linear sequence of steps between two camera poses.
   """
 
-  def __init__(self, pose1=None, pose2=None, nr_steps=None):
-    self.steps = []
-    self.total_steps = 0
+  def __init__(self,
+               pose1: Optional[PTZCameraPose] = None,
+               pose2: Optional[PTZCameraPose] = None,
+               nr_steps: Optional[int] = None) -> None:
+    self.steps: List[PTZCameraPose] = []
+    self.total_steps: int = 0
     if all([pose1, pose2, nr_steps]):
       self.add_linspaced_steps(pose1, pose2, nr_steps)
 
-  def add_linspaced_steps(self, pose1, pose2, nr_steps):
+  def add_linspaced_steps(self, pose1: PTZCameraPose, pose2: PTZCameraPose,
+                          nr_steps: int) -> None:
     pan_steps = np.linspace(pose1.pan, pose2.pan, nr_steps)
     tilt_steps = np.linspace(pose1.tilt, pose2.tilt, nr_steps)
     zoom_steps = np.linspace(pose1.zoom, pose2.zoom, nr_steps)
@@ -69,48 +78,50 @@ class SteppedMove:
     logging.info(f"{str(pose1)}->{str(pose2)}")
     logging.info(f"Generated {nr_steps} steps")
 
-  def has_steps(self):
+  def has_steps(self) -> bool:
     return bool(self.steps)
 
-  def pop_step(self):
+  def pop_step(self) -> Optional[PTZCameraPose]:
     if not self.has_steps():
       return None
 
     logging.info(f"Steps Nr: {len(self.steps)}")
     return self.steps.pop(0)
 
-  def __str__(self):
+  def __str__(self) -> str:
     return f"""
-              Steps: {len(self.steps)}/{self.total_steps}
-              Current Pose: {self.steps[0]}
-              Final Pose: {self.steps[-1]}
-            """
+        Steps: {len(self.steps)}/{self.total_steps}
+        Current Pose: {self.steps[0]}
+        Final Pose: {self.steps[-1]}
+      """
 
 
 class MCMCSteppedMove:
   """
-    Monte-Carlo Markov Chain step move.
+  Monte-Carlo Markov Chain step move.
   """
 
-  def __init__(self, step_size=0.1, heat_map=None):
+  def __init__(self,
+               step_size: float = 0.1,
+               heat_map: Optional[Callable] = None) -> None:
     self.step_size = step_size
     self.heat_map = heat_map
     self.running = False
 
-  def is_running(self):
+  def is_running(self) -> bool:
     return self.running
 
-  def metropolis_hastings(self, num_samples, initial_position, step_size):
+  def metropolis_hastings(self, num_samples: int,
+                          initial_position: List[float],
+                          step_size: float) -> np.ndarray:
     samples = []
     current_position = np.array(initial_position)
-    current_prob = self.heatmap(*current_position)
+    current_prob = self.heat_map(*current_position)
 
     for _ in range(num_samples):
-      # Propose a new sample
       proposal = current_position + np.random.normal(scale=step_size, size=2)
       proposal_prob = self.heat_map(*proposal)
 
-      # Accept or reject the proposal
       acceptance_prob = min(1, proposal_prob / current_prob)
       if np.random.rand() < acceptance_prob:
         current_position = proposal
@@ -123,16 +134,20 @@ class MCMCSteppedMove:
 
 class SteppedMover:
   """
-    Executes a sequence of camera move steps asynchronously with a delay.
+  Executes a sequence of camera move steps asynchronously with a delay.
   """
 
-  def __init__(self, widget, camera, stepped_move, mcmc_stepped_move=None):
+  def __init__(self,
+               widget: Any,
+               camera: Any,
+               stepped_move: SteppedMove,
+               mcmc_stepped_move: Optional[MCMCSteppedMove] = None) -> None:
     self.widget = widget
     self.camera = camera
     self.stepped_move = stepped_move
     self.mcmc_stepped_move = mcmc_stepped_move
 
-  def execute(self, callback=None):
+  def execute(self, callback: Optional[Callable] = None) -> None:
     if self.widget.wait_sequence:
       if self.mcmc_stepped_move:
         self.widget.after(500, lambda: self.execute(callback))

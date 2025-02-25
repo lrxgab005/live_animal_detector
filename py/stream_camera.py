@@ -11,20 +11,21 @@ import datetime
 import viz
 import alarms
 import network
+from typing import Optional, Any
 
 
 class CameraStreamer:
 
-  def __init__(self, url):
+  def __init__(self, url: str | int) -> None:
     self.url = url
     self.cap = cv2.VideoCapture(url)
     if not self.cap.isOpened():
       raise RuntimeError("Cannot open stream")
 
-  def read_frame(self):
+  def read_frame(self) -> Optional[Any]:
     ret, frame = self.cap.read()
     if not ret:
-      if os.path.isfile(self.url):
+      if isinstance(self.url, str) and os.path.isfile(self.url):
         self.cap.release()
         self.cap = cv2.VideoCapture(self.url)
         return self.read_frame()
@@ -32,18 +33,18 @@ class CameraStreamer:
         return None
     return frame
 
-  def release(self):
+  def release(self) -> None:
     self.cap.release()
 
 
 class StatsMeasurer:
 
-  def __init__(self):
-    self.last_time = time.time()
-    self.frame_count = 0
-    self.fps = 0.0
+  def __init__(self) -> None:
+    self.last_time: float = time.time()
+    self.frame_count: int = 0
+    self.fps: float = 0.0
 
-  def update(self, latency_ms):
+  def update(self, latency_ms: float) -> None:
     self.frame_count += 1
     elapsed = time.time() - self.last_time
     if elapsed >= 1.0:
@@ -54,7 +55,7 @@ class StatsMeasurer:
     logging.debug(f"Frame latency: {latency_ms:.2f} ms")
 
 
-def frame_reader(streamer, frame_queue):
+def frame_reader(streamer: CameraStreamer, frame_queue: Queue) -> None:
   while True:
     frame = streamer.read_frame()
     if frame is None:
@@ -63,7 +64,7 @@ def frame_reader(streamer, frame_queue):
   frame_queue.put(None)
 
 
-def main():
+def main() -> None:
   parser = argparse.ArgumentParser(
       description='Live stream processing. Can be run on network camera stream,'
       ' video file or webcam. Default is webcam.')
@@ -147,7 +148,7 @@ def main():
 
     drawer.draw_detections(detection_frame)
     alarm_detections = alarm(detection_frame)
-    if alarm_detections.has_detections:
+    if detection_frame.has_detections:
       network.send(config.FRAME_DATA_PORT, detection_frame.to_dict())
     drawer.draw_detections(alarm_detections, bold=True)
 

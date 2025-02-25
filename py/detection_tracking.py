@@ -1,3 +1,4 @@
+from typing import Dict, List, Tuple, Deque, Optional
 import threading
 import numpy as np
 import time
@@ -6,7 +7,7 @@ import os
 import datetime
 import collections
 import network
-from ptz_network_lib import PTZCamera
+import ptz_network_lib as ptz
 import logging
 
 # Configure logging
@@ -40,19 +41,19 @@ class DynamicHeatmap:
     self.pan_sigma_scale = pan_sigma_scale
     self.tilt_sigma_scale = tilt_sigma_scale
 
-  def pan_tilt_to_bin(self, pan: float, tilt: float) -> tuple:
+  def pan_tilt_to_bin(self, pan: float, tilt: float) -> Tuple[int, int]:
     p_idx = int((pan % 360) / 360 * self.pan_bins)
     t_idx = int((tilt + 90) / 180 * self.tilt_bins)
     p_idx = np.clip(p_idx, 0, self.pan_bins - 1)
     t_idx = np.clip(t_idx, 0, self.tilt_bins - 1)
     return p_idx, t_idx
 
-  def bin_to_pan_tilt(self, p_idx: int, t_idx: int) -> tuple:
+  def bin_to_pan_tilt(self, p_idx: int, t_idx: int) -> Tuple[float, float]:
     pan = (p_idx / self.pan_bins) * 360
     tilt = (t_idx / self.tilt_bins) * 180 - 90
     return pan, tilt
 
-  def zoom_to_sigma(self, zoom: float) -> float:
+  def zoom_to_sigma(self, zoom: float) -> Tuple[float, float]:
     zoom_scale = 1 - np.clip(0.01 + zoom / self.max_zoom, 0, 1)
     sigma_x = zoom_scale * self.pan_sigma_scale
     sigma_y = zoom_scale * self.tilt_sigma_scale
@@ -108,7 +109,9 @@ class DynamicHeatmap:
   def update(self, detections: dict) -> None:
     for pose, score in zip(detections["poses"], detections["scores"]):
       sigma_x, sigma_y = self.zoom_to_sigma(pose["zoom"])
-      print(f"Sigma x: {sigma_x}, Sigma y: {sigma_y}, Zoom: {pose['zoom']}")
+      logging.info(
+          f"Sigma x: {sigma_x}, Sigma y: {sigma_y}, Zoom: {pose['zoom']}, Score: {score}"
+      )
       self.add_gaussian_heat(pose["pan"],
                              pose["tilt"],
                              sigma_x=sigma_x,
@@ -121,7 +124,7 @@ class DynamicHeatmap:
   def get_norm_heatval(self, p_idx, t_idx) -> float:
     return np.clip(self.heatmap[p_idx, t_idx], 0, 1)
 
-  def get_pan_tilt_heat_map(self) -> dict:
+  def get_pan_tilt_heat_map(self) -> Dict[Tuple[float, float], float]:
     pan_tilt_map = {}
     for p_idx in range(self.pan_bins):
       for t_idx in range(self.tilt_bins):
@@ -143,7 +146,8 @@ class BBoxCameraPoseConverter:
     self.fx_scale = fx_scale
     self.fy_scale = fy_scale
 
-  def convert(self, bbox, cam_pose):
+  def convert(self, bbox: Tuple[float, float, float, float],
+              cam_pose: Dict[str, float]) -> Dict[str, float]:
     x0, y0, x1, y1 = bbox
     x_center = (x0 + x1) / 2.0
     y_center = (y0 + y1) / 2.0
@@ -176,7 +180,7 @@ class DetectionPositionMatcher:
   """
 
   def __init__(self,
-               camera: PTZCamera,
+               camera: ptz.PTZCamera,
                frame_data_port: int,
                min_dt_ms: int,
                frame_to_pose_latency_ms: int,
@@ -264,7 +268,8 @@ class DetectionPositionMatcher:
     with open(self.detection_pose_file_path, "w") as fp:
       fp.write(json.dumps(list(self.detection_pose_match_queue), indent=2))
 
-  def add_poses_to_detections(self, detections, cam_pose) -> dict:
+  def add_poses_to_detections(self, detections: Dict[str, List],
+                              cam_pose: Dict[str, float]) -> Dict[str, List]:
     detections["poses"] = []
     for bbox in detections["bboxes"]:
       detections["poses"].append(
