@@ -87,27 +87,73 @@ class SteppedMove:
             """
 
 
+class MCMCSteppedMove:
+  """
+    Monte-Carlo Markov Chain step move.
+  """
+
+  def __init__(self, step_size=0.1, heat_map=None):
+    self.step_size = step_size
+    self.heat_map = heat_map
+    self.running = False
+
+  def is_running(self):
+    return self.running
+
+  def metropolis_hastings(self, num_samples, initial_position, step_size):
+    samples = []
+    current_position = np.array(initial_position)
+    current_prob = self.heatmap(*current_position)
+
+    for _ in range(num_samples):
+      # Propose a new sample
+      proposal = current_position + np.random.normal(scale=step_size, size=2)
+      proposal_prob = self.heat_map(*proposal)
+
+      # Accept or reject the proposal
+      acceptance_prob = min(1, proposal_prob / current_prob)
+      if np.random.rand() < acceptance_prob:
+        current_position = proposal
+        current_prob = proposal_prob
+
+      samples.append(current_position)
+
+    return np.array(samples)
+
+
 class SteppedMover:
   """
     Executes a sequence of camera move steps asynchronously with a delay.
   """
 
-  def __init__(self, widget, camera):
+  def __init__(self, widget, camera, stepped_move, mcmc_stepped_move=None):
     self.widget = widget
     self.camera = camera
+    self.stepped_move = stepped_move
+    self.mcmc_stepped_move = mcmc_stepped_move
 
-  def execute(self, stepped_move, callback=None):
-    if hasattr(self.widget, "break_sequence") and self.widget.break_sequence:
-      logging.info("Breaking sequence")
+  def execute(self, callback=None):
+    if self.widget.wait_sequence:
+      if self.mcmc_stepped_move:
+        self.widget.after(500, lambda: self.execute(callback))
+      elif not self.mcmc_stepped_move.is_running:
+        self.mcmc_stepped_move.metropolis_hastings(1000,
+                                                   initial_position=[0, 0],
+                                                   step_size=0.1)
+
+      self.widget.after(500, lambda: self.execute(callback))
+      return
+
+    if self.widget.break_sequence:
       self.widget.break_sequence = False
       return
 
-    if not stepped_move.has_steps():
+    if not self.stepped_move.has_steps():
       if callback:
         callback()
       return
 
-    next_pose = stepped_move.pop_step()
+    next_pose = self.stepped_move.pop_step()
 
     try:
       self.camera.move_absolute(next_pose.pan, next_pose.tilt, next_pose.zoom)
@@ -117,5 +163,6 @@ class SteppedMover:
       if callback:
         callback()
       return
+
     self.widget.after(int(next_pose.wait_time_ms),
-                      lambda: self.execute(stepped_move, callback))
+                      lambda: self.execute(callback))

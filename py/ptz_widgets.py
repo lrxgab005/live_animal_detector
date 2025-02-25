@@ -614,6 +614,8 @@ class TrackMoveSequenceDialog(tk.Toplevel):
 
     self.detection_pose_matcher = detection_pose_matcher
     self.zoom_step = zoom_step
+    self.break_sequence = False
+    self.wait_sequence = False
 
     # Canvas parameters
     self.legend_width = 100
@@ -630,7 +632,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
     self.class_id_to_name = class_id_to_name
 
     self._build_ui()
-    self.break_sequence = False
+
     self.after(100, self.update_plot)
 
   def _load_sequences(self, seq_folder_path: str) -> None:
@@ -667,8 +669,12 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                                    center_x=self.center_x,
                                    center_y=self.center_y,
                                    radius=self.radius)
-    self.pt_canvas.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
+    self.pt_canvas.grid(row=2, column=0, columnspan=3, padx=5, pady=5)
     self.pt_canvas.bind("<Button-1>", self.on_canvas_click)
+
+    # Play / Pause button
+    tk.Button(self, text='\u23EF',
+              command=self.toggle_play_sequence).grid(row=0, column=2, padx=5)
 
     # Legend on the right side
     legend_start_x = self.circle_area_width + 10
@@ -694,7 +700,7 @@ class TrackMoveSequenceDialog(tk.Toplevel):
 
     # Zoom controls
     zoom_frame = tk.Frame(self)
-    zoom_frame.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+    zoom_frame.grid(row=3, column=0, columnspan=3, padx=5, pady=5)
     self.pose_label = tk.Label(zoom_frame, text="Zoom: 0")
     self.pose_label.grid(row=0, column=0, padx=5)
     tk.Button(zoom_frame, text="-", command=self.decrease_zoom).grid(row=0,
@@ -705,7 +711,15 @@ class TrackMoveSequenceDialog(tk.Toplevel):
                                                                      padx=5)
 
   def stop_sequence(self) -> None:
+    logging.info("Stopping sequence")
     self.break_sequence = True
+
+  def toggle_play_sequence(self) -> None:
+    self.wait_sequence = not self.wait_sequence
+    if self.wait_sequence:
+      logging.info("Pausing sequence")
+    else:
+      logging.info("Resuming sequence")
 
   def on_canvas_click(self, event: tk.Event):
     # Convert click to pan/tilt, then move camera
@@ -772,6 +786,8 @@ class TrackMoveSequenceDialog(tk.Toplevel):
       logging.error("Selected file not found")
       messagebox.showerror("Error", "Selected file not found")
       return
+
+    # Generate sequence of moves
     seq_moves = cpg.SteppedMove()
     for sequence in self.sequences_dict[file_key]:
       start_pose = cpg.PTZCameraPose()
@@ -780,8 +796,19 @@ class TrackMoveSequenceDialog(tk.Toplevel):
       end_pose.load_from_dict(sequence.get("end_pose"))
       seq_moves.add_linspaced_steps(start_pose, end_pose,
                                     sequence.get("nr_steps"))
-    step_mover = cpg.SteppedMover(self, self.camera)
-    step_mover.execute(seq_moves, callback=self.on_run)
+
+    # initial MCMC Stepper
+    mcmc_move = cpg.MCMCSteppedMove(
+        step_size=0.1, heat_map=self.detection_pose_matcher.heat_map)
+
+    # Execute sequence
+    step_mover = cpg.SteppedMover(
+        widget=self,
+        camera=self.camera,
+        stepped_move=seq_moves,
+        mcmc_stepped_move=mcmc_move,
+    )
+    step_mover.execute(callback=self.on_run)
 
 
 class BBoxMoveDialog(tk.Toplevel):
