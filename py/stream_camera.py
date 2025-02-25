@@ -101,13 +101,6 @@ def main():
   logging.basicConfig(level=logging.INFO,
                       format="%(asctime)s %(levelname)s: %(message)s")
 
-  if args.camera_config is not None:
-    config.load_cam_settings(args.camera_config)
-  elif args.video_file is not None:
-    config.CAMERA_URL = args.video_file
-  elif args.webcam is not None:
-    config.CAMERA_URL = args.webcam
-
   streamer = CameraStreamer(config.CAMERA_URL)
   detector = yolo_detector.Detector(model=config.YOLO_MODEL)
   drawer = viz.FrameDrawer(detector.class_id_names)
