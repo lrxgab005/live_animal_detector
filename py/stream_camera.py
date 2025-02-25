@@ -148,8 +148,8 @@ def main() -> None:
 
     drawer.draw_detections(detection_frame)
     alarm_detections = alarm(detection_frame)
-    if detection_frame.has_detections:
-      network.send(config.FRAME_DATA_PORT, detection_frame.to_dict())
+    if alarm_detections.has_detections:
+      network.send(config.FRAME_DATA_PORT, alarm_detections.to_dict())
     drawer.draw_detections(alarm_detections, bold=True)
 
     if alarm_detections.has_detections:
