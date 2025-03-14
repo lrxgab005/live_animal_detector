@@ -35,7 +35,10 @@ class Alarm:
     self.remote_player_url = remote_player_url
 
   def __call__(self, detection_frame: dt.DetectionFrame) -> dt.DetectionFrame:
-    alarm_detetions = dt.DetectionFrame(detection_frame.image_frame)
+    alarm_detetions = dt.DetectionFrame(
+      image_frame=detection_frame.image_frame,
+      timestamp=detection_frame.timestamp,
+    )
     alarm = False
     for bbox, class_id, score in zip(detection_frame.bboxes,
                                      detection_frame.class_ids,
